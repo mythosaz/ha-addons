@@ -6,7 +6,7 @@ Custom Home Assistant addons for extended functionality.
 
 1. In Home Assistant, navigate to **Settings** → **Add-ons** → **Add-on Store**
 2. Click the **⋮** menu (top right) → **Repositories**
-3. Add this repository URL: `https://github.com/mythosas/ha-addons`
+3. Add this repository URL: `https://github.com/mythosaz/ha-addons`
 4. The addons will appear in your add-on store
 
 ## Available Addons
@@ -24,4 +24,4 @@ Long-running OpenAI image generation service that bypasses Home Assistant's shel
 
 ## Support
 
-For issues or feature requests, please use the [GitHub issue tracker](https://github.com/mythosas/ha-addons/issues).
+For issues or feature requests, please use the [GitHub issue tracker](https://github.com/mythosaz/ha-addons/issues).
