@@ -19,7 +19,7 @@ This add-on provides a persistent service that generates images using OpenAI's A
 
 1. Add this repository to your Home Assistant:
    - Settings → Add-ons → Add-on Store → ⋮ → Repositories
-   - Add: `https://github.com/YOURUSERNAME/ha-addons`
+   - Add: `https://github.com/mythosas/ha-addons`
 
 2. Install the "OpenAI Image Generator" add-on
 
@@ -188,4 +188,4 @@ MIT
 
 ## Support
 
-Report issues at: https://github.com/YOURUSERNAME/ha-addons/issues
+Report issues at: https://github.com/mythosas/ha-addons/issues
