@@ -1,0 +1,25 @@
+name: "OpenAI Image Generator"
+description: "Long-running OpenAI image generation without shell_command timeout limits"
+version: "1.0.0"
+slug: "openai_image"
+init: false
+arch:
+  - aarch64
+  - amd64
+homeassistant_api: true
+stdin: true
+map:
+  - media:rw
+  - config:ro
+options:
+  openai_api_key: ""
+  default_model: "gpt-image-1"
+  default_quality: "high"
+  default_size: "1536x1024"
+  output_dir: "/media/generated"
+schema:
+  openai_api_key: str
+  default_model: str
+  default_quality: list(low|medium|high|auto)
+  default_size: list(1024x1024|1536x1024|1024x1536|auto)
+  output_dir: str
