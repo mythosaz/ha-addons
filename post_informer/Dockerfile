@@ -1,8 +1,8 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Install Python and dependencies
-RUN apk add --no-cache python3 py3-pip
+# Install Python, ffmpeg, and dependencies
+RUN apk add --no-cache python3 py3-pip ffmpeg
 RUN pip3 install --no-cache-dir --break-system-packages openai requests
 
 # Copy add-on files

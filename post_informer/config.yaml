@@ -1,5 +1,5 @@
 name: "Post Informer"
-description: "Long-running HTTP POST service without shell_command timeout limits"
+description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
 version: "1.0.0"
 slug: "post_informer"
 init: false
@@ -12,14 +12,69 @@ map:
   - media:rw
   - config:ro
 options:
+  # API Configuration
   openai_api_key: ""
-  default_model: "gpt-image-1"
-  default_quality: "high"
-  default_size: "1536x1024"
+  prompt_model: "gpt-4o"
+  image_model: "gpt-image-1.5"
+
+  # Entity Monitoring
+  entity_ids: ""
+
+  # Prompt Customization
+  use_default_prompts: true
+  custom_system_prompt: ""
+  custom_user_prompt: ""
+
+  # Image Configuration
+  image_quality: "high"
+  image_size: "1536x1024"
+
+  # Resize Configuration
+  resize_output: true
+  target_resolution: "1080p"
+  save_original: true
+
+  # Video Configuration
+  enable_video: true
+  video_duration: 1800
+  video_framerate: "0.25"
+  use_default_ffmpeg: true
+  custom_ffmpeg_args: ""
+
+  # Output
   output_dir: "/media/generated"
+  filename_prefix: "hud_display"
+
 schema:
+  # API Configuration
   openai_api_key: str
-  default_model: str
-  default_quality: list(low|medium|high|auto)
-  default_size: list(1024x1024|1536x1024|1024x1536|auto)
+  prompt_model: str
+  image_model: str
+
+  # Entity Monitoring
+  entity_ids: str
+
+  # Prompt Customization
+  use_default_prompts: bool
+  custom_system_prompt: str
+  custom_user_prompt: str
+
+  # Image Configuration
+  image_quality: list(low|medium|high|auto)
+  image_size: str
+
+  # Resize Configuration
+  resize_output: bool
+  target_resolution: list(4k|1080p|720p|480p|custom)
+  save_original: bool
+
+  # Video Configuration
+  enable_video: bool
+  video_duration: int
+  video_framerate: str
+  use_default_ffmpeg: bool
+  custom_ffmpeg_args: str
+
+  # Output
   output_dir: str
+  filename_prefix: str
