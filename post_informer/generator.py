@@ -15,6 +15,10 @@ from datetime import datetime
 from openai import OpenAI
 from typing import Dict, List, Optional, Any
 
+# Version info
+BUILD_VERSION = "1.0.0-2026-01-05"
+BUILD_TIMESTAMP = "2026-01-05 10:30:00 UTC"
+
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
 # ============================================================================
@@ -574,6 +578,10 @@ def run_pipeline() -> Dict[str, Any]:
 # ============================================================================
 
 def main():
+    log("=" * 60)
+    log(f"Post Informer v{BUILD_VERSION}")
+    log(f"Build: {BUILD_TIMESTAMP}")
+    log("=" * 60)
     log("Add-on started, waiting for input...")
     log(f"Config: {PROMPT_MODEL} → {IMAGE_MODEL}")
     log(f"Output: {OUTPUT_DIR}/{FILENAME_PREFIX}_*")
