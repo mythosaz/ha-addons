@@ -156,6 +156,7 @@ def gather_ha_entities(entity_ids: List[str]) -> Dict[str, Any]:
 
     start_time = datetime.now()
     log(f"Gathering {len(entity_ids)} entity states...")
+    log(f"Looking for: {entity_ids}")
 
     entities = {}
 
@@ -172,6 +173,8 @@ def gather_ha_entities(entity_ids: List[str]) -> Dict[str, Any]:
         resp.raise_for_status()
         all_states = resp.json()
 
+        log(f"API returned {len(all_states)} total states")
+
         # Filter to requested entities
         for state in all_states:
             entity_id = state.get("entity_id")
@@ -184,6 +187,11 @@ def gather_ha_entities(entity_ids: List[str]) -> Dict[str, Any]:
 
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Gathered {len(entities)} entities", timing=elapsed)
+
+        # Debug: show which entities were not found
+        if len(entities) < len(entity_ids):
+            missing = set(entity_ids) - set(entities.keys())
+            log(f"WARNING: Could not find {len(missing)} entities: {missing}")
 
     except Exception as e:
         elapsed = (datetime.now() - start_time).total_seconds()
@@ -437,9 +445,11 @@ def run_pipeline() -> Dict[str, Any]:
     }
 
     # Step 1: Gather HA entities
+    log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
     entity_list = [e.strip() for e in ENTITY_IDS.split('\n') if e.strip()]
     if not entity_list:
         entity_list = [e.strip() for e in ENTITY_IDS.split(',') if e.strip()]
+    log(f"Parsed {len(entity_list)} entity IDs from config")
 
     context = gather_ha_entities(entity_list)
     result["steps"]["gather_entities"] = {
