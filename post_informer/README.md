@@ -104,9 +104,31 @@ filename_prefix: "hud_display"
 
 #### Entity Monitoring
 
-- **entity_ids**: Newline-separated or comma-separated list of HA entity IDs to monitor
+- **entity_ids**: List of HA entity IDs to monitor
+  - Supports multiple formats:
+    - **Newline-separated** (recommended): Use `|` or `|-` for literal newlines
+    - **Space-separated**: Use `>-` (YAML folded scalar)
+    - **Comma-separated**: `sensor.a, sensor.b, sensor.c`
   - Examples: `sensor.temperature`, `calendar.events`, `todo.tasks`
   - Leave blank to skip entity gathering (you can still trigger with custom prompts)
+
+**Format Examples:**
+```yaml
+# Newline-separated (recommended)
+entity_ids: |
+  sensor.weather_temperature
+  calendar.family
+  todo.shopping_list
+
+# Space-separated (YAML folded scalar)
+entity_ids: >-
+  sensor.weather_temperature
+  calendar.family
+  todo.shopping_list
+
+# Comma-separated
+entity_ids: "sensor.weather_temperature, calendar.family, todo.shopping_list"
+```
 
 #### Prompt Customization
 
