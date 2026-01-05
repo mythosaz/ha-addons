@@ -445,9 +445,11 @@ def run_pipeline() -> Dict[str, Any]:
     }
 
     # Step 1: Gather HA entities
+    log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
     entity_list = [e.strip() for e in ENTITY_IDS.split('\n') if e.strip()]
     if not entity_list:
         entity_list = [e.strip() for e in ENTITY_IDS.split(',') if e.strip()]
+    log(f"Parsed {len(entity_list)} entity IDs from config")
 
     context = gather_ha_entities(entity_list)
     result["steps"]["gather_entities"] = {
