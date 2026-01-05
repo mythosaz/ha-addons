@@ -446,9 +446,19 @@ def run_pipeline() -> Dict[str, Any]:
 
     # Step 1: Gather HA entities
     log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
+
+    # Parse entity IDs - support multiple formats:
+    # - Newline separated
+    # - Comma separated
+    # - Space separated (YAML folded scalar >- converts newlines to spaces)
     entity_list = [e.strip() for e in ENTITY_IDS.split('\n') if e.strip()]
-    if not entity_list:
+    if not entity_list or len(entity_list) == 1:
+        # Try comma-separated
         entity_list = [e.strip() for e in ENTITY_IDS.split(',') if e.strip()]
+    if not entity_list or len(entity_list) == 1:
+        # Try space-separated (YAML folded scalars)
+        entity_list = [e.strip() for e in ENTITY_IDS.split() if e.strip()]
+
     log(f"Parsed {len(entity_list)} entity IDs from config")
 
     context = gather_ha_entities(entity_list)
