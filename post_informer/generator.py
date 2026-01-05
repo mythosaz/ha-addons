@@ -99,8 +99,12 @@ Search the internet for major headlines.
 Search the internet for local Phoenix news.
 Should the national or local news include important or noteworthy items, consider them for inclusion.
 
+NOTE:
+This is a static image. Do not display the actual time. Reflect only in the art.
+
 TASK:
 Create exactly one highly detailed unconstrained image-1.5 prompt with no limit - Do not explain your reasoning.
+
 """
 
 # Resolution mapping (standard 16:9 aspect ratio)
