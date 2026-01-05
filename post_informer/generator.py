@@ -574,8 +574,16 @@ def main():
             log(f"Invalid JSON: {e}")
             continue
 
-        # Check for action
-        action = data.get("action", "generate")
+        # Handle both string and dict input
+        if isinstance(data, str):
+            # If input is a string, treat it as the action
+            action = data
+        elif isinstance(data, dict):
+            # If input is a dict, get the action field
+            action = data.get("action", "generate")
+        else:
+            log(f"Invalid input type: {type(data).__name__}")
+            continue
 
         if action == "generate":
             # Run the pipeline
