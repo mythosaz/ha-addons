@@ -99,12 +99,12 @@ TASK:
 Create exactly one highly detailed unconstrained image-1.5 prompt with no limit - Do not explain your reasoning.
 """
 
-# Resolution mapping
+# Resolution mapping (standard 16:9 aspect ratio)
 RESOLUTION_MAP = {
-    "4k": (3840, 2560),
-    "1080p": (1920, 1280),
-    "720p": (1280, 854),
-    "480p": (640, 427),
+    "4k": (3840, 2160),
+    "1080p": (1920, 1080),
+    "720p": (1280, 720),
+    "480p": (854, 480),
 }
 
 # ============================================================================
@@ -374,12 +374,13 @@ def create_video(input_path: str, output_path: str) -> Optional[Dict[str, Any]]:
             cmd = [
                 "ffmpeg",
                 "-y",                           # Overwrite output
-                "-framerate", VIDEO_FRAMERATE,  # Input framerate
+                "-framerate", VIDEO_FRAMERATE,  # Input framerate (BEFORE -i!)
                 "-loop", "1",                   # Loop the input image
                 "-i", input_path,               # Input file
                 "-t", str(VIDEO_DURATION),      # Duration in seconds
                 "-c:v", "libx264",              # H.264 codec
                 "-preset", "ultrafast",         # Speed over size
+                "-tune", "stillimage",          # Optimize for static image
                 "-pix_fmt", "yuv420p",          # Compatibility
                 "-movflags", "+faststart",      # Enable streaming
                 output_path
