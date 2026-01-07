@@ -288,14 +288,19 @@ Event data includes full pipeline details:
 
 ## File Outputs
 
-Each pipeline run generates timestamped files:
+Each pipeline run generates timestamped files plus master symlinks for easy access:
 
 ```
 /media/generated/
   hud_display_202601050600_original.png    # High-res original (1536×1024)
   hud_display_202601050600_1080p.png       # Resized for display
   hud_display_202601050600.mp4             # 30-minute looping video
+
+  hud_display_master.png                   # Symlink to latest image (for easy playback)
+  hud_display_master.mp4                   # Symlink to latest video (for easy playback)
 ```
+
+**Master files**: The `_master.png` and `_master.mp4` files are automatically updated to point to the latest generated content. This makes it easy to configure displays to always show the current version without updating paths. All timestamped versions are retained for history.
 
 ## Default Prompts
 
