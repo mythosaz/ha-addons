@@ -435,6 +435,32 @@ def create_video(input_path: str, output_path: str) -> Optional[Dict[str, Any]]:
             "encode_time": elapsed
         }
 
+
+def update_master_file(source_path: str, master_name: str) -> bool:
+    """Create or update a master symlink/copy for easy access to the latest version"""
+    try:
+        output_path = Path(OUTPUT_DIR)
+        master_path = output_path / master_name
+
+        # Remove old master if it exists
+        if master_path.exists() or master_path.is_symlink():
+            master_path.unlink()
+
+        # Create symlink to the latest version
+        source_file = Path(source_path)
+        if source_file.exists():
+            # Use relative symlink for better portability
+            master_path.symlink_to(source_file.name)
+            log(f"Updated master: {master_name} -> {source_file.name}")
+            return True
+        else:
+            log(f"Warning: Source file not found: {source_path}")
+            return False
+
+    except Exception as e:
+        log(f"Error updating master file {master_name}: {e}")
+        return False
+
 # ============================================================================
 # PIPELINE ORCHESTRATION
 # ============================================================================
@@ -502,6 +528,8 @@ def run_pipeline() -> Dict[str, Any]:
 
     # Step 4: Resize image (if enabled)
     resized_filepath = None
+    master_image_source = image_result["filepath"]
+
     if RESIZE_OUTPUT:
         resized_filename = f"{FILENAME_PREFIX}_{timestamp}_{TARGET_RESOLUTION}.png"
         resized_filepath = str(Path(OUTPUT_DIR) / resized_filename)
@@ -515,6 +543,7 @@ def run_pipeline() -> Dict[str, Any]:
         if resize_result and resize_result.get("success"):
             result["steps"]["resize_image"] = resize_result
             result["image_resized"] = resized_filepath
+            master_image_source = resized_filepath
 
             # Fire image complete event
             fire_event("post_informer_image_complete", {
@@ -535,6 +564,9 @@ def run_pipeline() -> Dict[str, Any]:
             "timestamp": result["timestamp"]
         })
 
+    # Update master image (use resized if available, otherwise original)
+    update_master_file(master_image_source, f"{FILENAME_PREFIX}_master.png")
+
     # Step 5: Create video (if enabled)
     if ENABLE_VIDEO:
         # Use resized image if available, otherwise original
@@ -548,6 +580,9 @@ def run_pipeline() -> Dict[str, Any]:
             result["steps"]["create_video"] = video_result
             result["video"] = video_filepath
             result["success"] = True
+
+            # Update master video
+            update_master_file(video_filepath, f"{FILENAME_PREFIX}_master.mp4")
 
             # Fire video complete event
             fire_event("post_informer_video_complete", {

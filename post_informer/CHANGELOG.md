@@ -2,6 +2,19 @@
 
 All notable changes to this add-on will be documented in this file.
 
+## [1.0.1] - 2026-01-07
+
+### Added
+- **Master Files**: Automatically creates and updates master symlinks for easy access to latest content
+  - `hud_display_master.png` - Always points to latest still image (resized or original)
+  - `hud_display_master.mp4` - Always points to latest video
+  - Makes it easy to configure displays with static paths that always show current content
+  - All timestamped versions are retained for history
+
+### Changed
+- Video generation remains optional (controlled by `enable_video` setting)
+- All generated files (images and videos) are retained without archiving
+
 ## [1.0.0] - 2026-01-05
 
 ### Added
