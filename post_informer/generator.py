@@ -199,7 +199,10 @@ def gather_ha_entities(entity_ids: List[str]) -> Dict[str, Any]:
         # Debug: show which entities were not found
         if len(entities) < len(entity_ids):
             missing = set(entity_ids) - set(entities.keys())
-            log(f"WARNING: Could not find {len(missing)} entities: {missing}")
+            log("=" * 60)
+            log(f"⚠️  WARNING: Could not find {len(missing)} entities!")
+            log(f"⚠️  Missing entities: {missing}")
+            log("=" * 60)
 
     except Exception as e:
         elapsed = (datetime.now() - start_time).total_seconds()
@@ -256,7 +259,11 @@ def generate_prompt_from_context(context: Dict[str, Any]) -> Optional[str]:
 
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Generated prompt ({len(prompt)} chars)", timing=elapsed)
-        log(f"Prompt preview: {prompt[:200]}...")
+        log("=" * 60)
+        log("FULL PROMPT FOR IMAGE GENERATION:")
+        log("=" * 60)
+        log(prompt)
+        log("=" * 60)
 
         return prompt
 
@@ -439,23 +446,38 @@ def create_video(input_path: str, output_path: str) -> Optional[Dict[str, Any]]:
 def embed_metadata(image_path: str, prompt: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
     """Embed prompt and metadata into PNG using ImageMagick"""
     try:
-        # Start with the prompt as the main description
+        # Build command with comprehensive metadata
         cmd = [
             "convert",
             image_path,
-            "-set", "Description", prompt
+            "-set", "Description", prompt,  # Full prompt in Description
+            "-set", "comment", prompt,      # Also in comment for compatibility
         ]
 
         # Add additional metadata if provided
         if metadata:
-            # Add model info if available
+            # Add model info as Software
             if "model" in metadata:
                 cmd.extend(["-set", "Software", f"OpenAI {metadata['model']}"])
 
-            # Add any other metadata as comments
-            for key, value in metadata.items():
-                if key != "model" and value:
-                    cmd.extend(["-set", f"comment:{key}", str(value)])
+            # Add prompt model if available
+            if "prompt_model" in metadata:
+                cmd.extend(["-set", "comment:prompt_model", metadata['prompt_model']])
+
+            # Add image model if available
+            if "image_model" in metadata:
+                cmd.extend(["-set", "comment:image_model", metadata['image_model']])
+
+            # Add timestamp
+            if "timestamp" in metadata:
+                cmd.extend(["-set", "comment:timestamp", metadata['timestamp']])
+
+            # Add image size/quality if available
+            if "image_size" in metadata:
+                cmd.extend(["-set", "comment:image_size", metadata['image_size']])
+
+            if "image_quality" in metadata:
+                cmd.extend(["-set", "comment:image_quality", metadata['image_quality']])
 
         # Overwrite the original file
         cmd.append(image_path)
@@ -563,7 +585,11 @@ def run_pipeline() -> Dict[str, Any]:
         # Embed metadata into archived file
         metadata = {
             "model": IMAGE_MODEL,
-            "timestamp": timestamp
+            "prompt_model": PROMPT_MODEL,
+            "image_model": IMAGE_MODEL,
+            "timestamp": timestamp,
+            "image_size": IMAGE_SIZE,
+            "image_quality": IMAGE_QUALITY
         }
         embed_metadata(archive_path, art_prompt, metadata)
 
