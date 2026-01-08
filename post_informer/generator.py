@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Post Informer for Home Assistant
 AI-powered HUD display generator - gathers HA context, generates images, creates videos
@@ -15,9 +16,12 @@ from datetime import datetime
 from openai import OpenAI
 from typing import Dict, List, Optional, Any
 
+# Ensure UTF-8 output for proper character encoding
+sys.stdout.reconfigure(encoding='utf-8')
+
 # Version info
-BUILD_VERSION = "1.0.0-2026-01-05"
-BUILD_TIMESTAMP = "2026-01-05 10:30:00 UTC"
+BUILD_VERSION = "1.0.2-2026-01-08"
+BUILD_TIMESTAMP = "2026-01-08 02:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -284,7 +288,11 @@ def generate_image(prompt: str, filename: str) -> Optional[Dict[str, Any]]:
 
     log(f"Rendering image with {IMAGE_MODEL}...")
     log(f"Quality: {IMAGE_QUALITY}, Size: {IMAGE_SIZE}")
-    log(f"Prompt: {prompt[:100]}...")
+    log("=" * 60)
+    log("PROMPT FOR IMAGE GENERATION:")
+    log("=" * 60)
+    log(prompt)
+    log("=" * 60)
 
     try:
         client = OpenAI(api_key=API_KEY)
@@ -553,7 +561,7 @@ def run_pipeline() -> Dict[str, Any]:
 
     result["steps"]["generate_prompt"] = {
         "prompt_length": len(art_prompt),
-        "prompt_preview": art_prompt[:200]
+        "prompt": art_prompt  # Store full prompt, not preview
     }
 
     # Step 3: Generate image (temporary file)
