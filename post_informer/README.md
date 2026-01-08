@@ -90,8 +90,8 @@ use_default_ffmpeg: true
 custom_ffmpeg_args: ""
 
 # Output
-output_dir: "/media/generated"
-filename_prefix: "hud_display"
+output_dir: "/media/post_informer"
+filename_prefix: "post_informer"
 ```
 
 ### Configuration Options
@@ -159,8 +159,8 @@ entity_ids: "sensor.weather_temperature, calendar.family, todo.shopping_list"
 
 #### Output
 
-- **output_dir** (default: `/media/generated`): Where to save files
-- **filename_prefix** (default: `hud_display`): Prefix for generated filenames
+- **output_dir** (default: `/media/post_informer`): Where to save files
+- **filename_prefix** (default: `post_informer`): Prefix for generated filenames
 
 ## Usage
 
@@ -215,8 +215,8 @@ Event data:
 ```json
 {
   "success": true,
-  "image_original": "/media/generated/hud_display_202601050600_original.png",
-  "image_resized": "/media/generated/hud_display_202601050600_1080p.png",
+  "image": "/media/post_informer/post_informer.png",
+  "archive": "/media/post_informer/archive/post_informer_202601050600.png",
   "resolution": "1080p",
   "timestamp": "2026-01-05T06:00:00"
 }
@@ -246,7 +246,7 @@ Event data:
 ```json
 {
   "success": true,
-  "video": "/media/generated/hud_display_202601050600.mp4",
+  "video": "/media/post_informer/post_informer.mp4",
   "duration": 1800,
   "timestamp": "2026-01-05T06:00:00"
 }
@@ -272,9 +272,9 @@ Event data includes full pipeline details:
 {
   "success": true,
   "timestamp": "2026-01-05T06:00:00",
-  "image_original": "/media/generated/hud_display_202601050600_original.png",
-  "image_resized": "/media/generated/hud_display_202601050600_1080p.png",
-  "video": "/media/generated/hud_display_202601050600.mp4",
+  "image": "/media/post_informer/post_informer.png",
+  "archive": "/media/post_informer/archive/post_informer_202601050600.png",
+  "video": "/media/post_informer/post_informer.mp4",
   "total_time": 67.42,
   "steps": {
     "gather_entities": {...},
@@ -288,19 +288,22 @@ Event data includes full pipeline details:
 
 ## File Outputs
 
-Each pipeline run generates timestamped files plus master symlinks for easy access:
+Each pipeline run generates or overwrites working files, with optional archiving:
 
 ```
-/media/generated/
-  hud_display_202601050600_original.png    # High-res original (1536×1024)
-  hud_display_202601050600_1080p.png       # Resized for display
-  hud_display_202601050600.mp4             # 30-minute looping video
+/media/post_informer/
+  post_informer.png                        # Working image (resized, always overwritten)
+  post_informer.mp4                        # Working video (if enabled, always overwritten)
 
-  hud_display_master.png                   # Symlink to latest image (for easy playback)
-  hud_display_master.mp4                   # Symlink to latest video (for easy playback)
+  archive/                                 # Archive directory (only if save_original enabled)
+    post_informer_202601050600.png         # Original high-res with embedded metadata
+    post_informer_202601051200.png         # Next generation...
+    ...
 ```
 
-**Master files**: The `_master.png` and `_master.mp4` files are automatically updated to point to the latest generated content. This makes it easy to configure displays to always show the current version without updating paths. All timestamped versions are retained for history.
+**Working files**: The `post_informer.png` and `post_informer.mp4` files are always overwritten with the latest generation, making them easy to reference in automations and displays.
+
+**Archive**: When `save_original` is enabled, the original high-resolution image is saved to the `archive/` subdirectory with a timestamp and embedded metadata (prompt, model, etc.). This preserves a complete history of generations. The metadata is embedded using ImageMagick and can be viewed with tools like `exiftool` or `identify -verbose`.
 
 ## Default Prompts
 
@@ -332,18 +335,23 @@ View comprehensive logging in the add-on logs:
 [post_informer] [2026-01-05 06:00:15] Prompt preview: Create a kinetic vaporwave cityscape...
 [post_informer] [2026-01-05 06:00:15] Rendering image with gpt-image-1.5...
 [post_informer] [2026-01-05 06:00:15] Quality: high, Size: 1536x1024
-[post_informer] [2026-01-05 06:00:58] Image rendered: /media/generated/hud_display_202601050600_original.png (42.31s)
-[post_informer] [2026-01-05 06:00:58] Resizing to 1920x1280...
-[post_informer] [2026-01-05 06:00:59] Image resized: /media/generated/hud_display_202601050600_1080p.png (1.12s)
+[post_informer] [2026-01-05 06:00:58] Image rendered: /media/post_informer/post_informer_temp.png (42.31s)
+[post_informer] [2026-01-05 06:00:58] Archiving original to /media/post_informer/archive/post_informer_202601050600.png
+[post_informer] [2026-01-05 06:00:58] Embedded metadata into /media/post_informer/archive/post_informer_202601050600.png
+[post_informer] [2026-01-05 06:00:58] Resizing to 1920x1080...
+[post_informer] [2026-01-05 06:00:59] Image resized: /media/post_informer/post_informer.png (1.12s)
+[post_informer] [2026-01-05 06:00:59] Generated working image: /media/post_informer/post_informer.png
 [post_informer] [2026-01-05 06:00:59] Fired event post_informer_image_complete: HTTP 200
 [post_informer] [2026-01-05 06:00:59] Creating video (1800s @ 0.25 fps)...
-[post_informer] [2026-01-05 06:01:12] Video created: /media/generated/hud_display_202601050600.mp4 (13.21s)
+[post_informer] [2026-01-05 06:01:12] Video created: /media/post_informer/post_informer.mp4 (13.21s)
+[post_informer] [2026-01-05 06:01:12] Generated video: /media/post_informer/post_informer.mp4
 [post_informer] [2026-01-05 06:01:12] Fired event post_informer_video_complete: HTTP 200
 [post_informer] [2026-01-05 06:01:12] ============================================================
 [post_informer] [2026-01-05 06:01:12] PIPELINE COMPLETE (67.42s)
 [post_informer] [2026-01-05 06:01:12] ============================================================
-[post_informer] [2026-01-05 06:01:12] SUCCESS: Generated /media/generated/hud_display_202601050600_1080p.png
-[post_informer] [2026-01-05 06:01:12] SUCCESS: Generated /media/generated/hud_display_202601050600.mp4
+[post_informer] [2026-01-05 06:01:12] SUCCESS: Generated /media/post_informer/post_informer.png
+[post_informer] [2026-01-05 06:01:12] SUCCESS: Archived to /media/post_informer/archive/post_informer_202601050600.png
+[post_informer] [2026-01-05 06:01:12] SUCCESS: Generated /media/post_informer/post_informer.mp4
 ```
 
 ## Example Use Cases

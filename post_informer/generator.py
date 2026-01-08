@@ -53,8 +53,8 @@ USE_DEFAULT_FFMPEG = os.environ.get("USE_DEFAULT_FFMPEG", "true").lower() == "tr
 CUSTOM_FFMPEG_ARGS = os.environ.get("CUSTOM_FFMPEG_ARGS", "")
 
 # Output
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/media/generated")
-FILENAME_PREFIX = os.environ.get("FILENAME_PREFIX", "hud_display")
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/media/post_informer")
+FILENAME_PREFIX = os.environ.get("FILENAME_PREFIX", "post_informer")
 
 # Supervisor API
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -436,29 +436,46 @@ def create_video(input_path: str, output_path: str) -> Optional[Dict[str, Any]]:
         }
 
 
-def update_master_file(source_path: str, master_name: str) -> bool:
-    """Create or update a master symlink/copy for easy access to the latest version"""
+def embed_metadata(image_path: str, prompt: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
+    """Embed prompt and metadata into PNG using ImageMagick"""
     try:
-        output_path = Path(OUTPUT_DIR)
-        master_path = output_path / master_name
+        # Start with the prompt as the main description
+        cmd = [
+            "convert",
+            image_path,
+            "-set", "Description", prompt
+        ]
 
-        # Remove old master if it exists
-        if master_path.exists() or master_path.is_symlink():
-            master_path.unlink()
+        # Add additional metadata if provided
+        if metadata:
+            # Add model info if available
+            if "model" in metadata:
+                cmd.extend(["-set", "Software", f"OpenAI {metadata['model']}"])
 
-        # Create symlink to the latest version
-        source_file = Path(source_path)
-        if source_file.exists():
-            # Use relative symlink for better portability
-            master_path.symlink_to(source_file.name)
-            log(f"Updated master: {master_name} -> {source_file.name}")
-            return True
-        else:
-            log(f"Warning: Source file not found: {source_path}")
+            # Add any other metadata as comments
+            for key, value in metadata.items():
+                if key != "model" and value:
+                    cmd.extend(["-set", f"comment:{key}", str(value)])
+
+        # Overwrite the original file
+        cmd.append(image_path)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            log(f"Warning: ImageMagick metadata embedding failed: {result.stderr}")
             return False
 
+        log(f"Embedded metadata into {image_path}")
+        return True
+
     except Exception as e:
-        log(f"Error updating master file {master_name}: {e}")
+        log(f"Error embedding metadata: {e}")
         return False
 
 # ============================================================================
@@ -466,7 +483,7 @@ def update_master_file(source_path: str, master_name: str) -> bool:
 # ============================================================================
 
 def run_pipeline() -> Dict[str, Any]:
-    """Run the complete pipeline: gather → prompt → image → resize → video"""
+    """Run the complete pipeline: gather → prompt → image → archive → resize → video"""
     pipeline_start = datetime.now()
     log("=" * 60)
     log("STARTING PIPELINE")
@@ -477,6 +494,10 @@ def run_pipeline() -> Dict[str, Any]:
         "timestamp": datetime.now().isoformat(),
         "steps": {}
     }
+
+    # Ensure output directory exists
+    output_path = Path(OUTPUT_DIR)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Gather HA entities
     log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
@@ -513,81 +534,94 @@ def run_pipeline() -> Dict[str, Any]:
         "prompt_preview": art_prompt[:200]
     }
 
-    # Step 3: Generate image
+    # Step 3: Generate image (temporary file)
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
-    original_filename = f"{FILENAME_PREFIX}_{timestamp}_original.png"
+    temp_filename = f"{FILENAME_PREFIX}_temp.png"
 
-    image_result = generate_image(art_prompt, original_filename)
+    image_result = generate_image(art_prompt, temp_filename)
     if not image_result or not image_result.get("success"):
         result["error"] = image_result.get("error", "Unknown error")
         log("PIPELINE FAILED: Image generation failed")
         return result
 
     result["steps"]["generate_image"] = image_result
-    result["image_original"] = image_result["filepath"]
+    temp_image_path = image_result["filepath"]
 
-    # Step 4: Resize image (if enabled)
-    resized_filepath = None
-    master_image_source = image_result["filepath"]
+    # Step 4: Archive original with metadata (if save_original enabled)
+    archive_path = None
+    if SAVE_ORIGINAL:
+        archive_dir = output_path / "archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        archive_filename = f"{FILENAME_PREFIX}_{timestamp}.png"
+        archive_path = str(archive_dir / archive_filename)
+
+        # Copy temp file to archive
+        log(f"Archiving original to {archive_path}")
+        Path(temp_image_path).rename(archive_path)
+
+        # Embed metadata into archived file
+        metadata = {
+            "model": IMAGE_MODEL,
+            "timestamp": timestamp
+        }
+        embed_metadata(archive_path, art_prompt, metadata)
+
+        result["archive"] = archive_path
+
+        # Copy archive to temp for further processing
+        import shutil
+        shutil.copy2(archive_path, temp_image_path)
+
+    # Step 5: Resize to working image
+    working_image_path = str(output_path / f"{FILENAME_PREFIX}.png")
 
     if RESIZE_OUTPUT:
-        resized_filename = f"{FILENAME_PREFIX}_{timestamp}_{TARGET_RESOLUTION}.png"
-        resized_filepath = str(Path(OUTPUT_DIR) / resized_filename)
-
         resize_result = resize_image(
-            image_result["filepath"],
-            resized_filepath,
+            temp_image_path,
+            working_image_path,
             TARGET_RESOLUTION
         )
 
         if resize_result and resize_result.get("success"):
             result["steps"]["resize_image"] = resize_result
-            result["image_resized"] = resized_filepath
-            master_image_source = resized_filepath
-
-            # Fire image complete event
-            fire_event("post_informer_image_complete", {
-                "success": True,
-                "image_original": image_result["filepath"],
-                "image_resized": resized_filepath,
-                "resolution": TARGET_RESOLUTION,
-                "timestamp": result["timestamp"]
-            })
+            result["image"] = working_image_path
+            log(f"Generated working image: {working_image_path}")
         else:
-            log("WARNING: Resize failed, continuing with original")
-            result["steps"]["resize_image"] = resize_result
+            log("WARNING: Resize failed, using original as working image")
+            Path(temp_image_path).rename(working_image_path)
+            result["image"] = working_image_path
     else:
-        log("Resize disabled, skipping")
-        fire_event("post_informer_image_complete", {
-            "success": True,
-            "image_original": image_result["filepath"],
-            "timestamp": result["timestamp"]
-        })
+        # No resize, just move temp to working location
+        log("Resize disabled, using original size")
+        Path(temp_image_path).rename(working_image_path)
+        result["image"] = working_image_path
 
-    # Update master image (use resized if available, otherwise original)
-    update_master_file(master_image_source, f"{FILENAME_PREFIX}_master.png")
+    # Fire image complete event
+    fire_event("post_informer_image_complete", {
+        "success": True,
+        "image": working_image_path,
+        "archive": archive_path,
+        "resolution": TARGET_RESOLUTION if RESIZE_OUTPUT else IMAGE_SIZE,
+        "timestamp": result["timestamp"]
+    })
 
-    # Step 5: Create video (if enabled)
+    # Step 6: Create video (if enabled)
     if ENABLE_VIDEO:
-        # Use resized image if available, otherwise original
-        video_source = resized_filepath if resized_filepath else image_result["filepath"]
-        video_filename = f"{FILENAME_PREFIX}_{timestamp}.mp4"
-        video_filepath = str(Path(OUTPUT_DIR) / video_filename)
+        video_path = str(output_path / f"{FILENAME_PREFIX}.mp4")
 
-        video_result = create_video(video_source, video_filepath)
+        video_result = create_video(working_image_path, video_path)
 
         if video_result and video_result.get("success"):
             result["steps"]["create_video"] = video_result
-            result["video"] = video_filepath
+            result["video"] = video_path
             result["success"] = True
-
-            # Update master video
-            update_master_file(video_filepath, f"{FILENAME_PREFIX}_master.mp4")
+            log(f"Generated video: {video_path}")
 
             # Fire video complete event
             fire_event("post_informer_video_complete", {
                 "success": True,
-                "video": video_filepath,
+                "video": video_path,
                 "duration": VIDEO_DURATION,
                 "timestamp": result["timestamp"]
             })
@@ -598,6 +632,10 @@ def run_pipeline() -> Dict[str, Any]:
     else:
         log("Video generation disabled, skipping")
         result["success"] = True
+
+    # Clean up temp file if it still exists
+    if Path(temp_image_path).exists():
+        Path(temp_image_path).unlink()
 
     # Pipeline complete
     pipeline_elapsed = (datetime.now() - pipeline_start).total_seconds()
@@ -659,7 +697,9 @@ def main():
 
             # Log summary
             if result.get("success"):
-                log(f"SUCCESS: Generated {result.get('image_resized', result.get('image_original'))}")
+                log(f"SUCCESS: Generated {result.get('image')}")
+                if result.get("archive"):
+                    log(f"SUCCESS: Archived to {result.get('archive')}")
                 if result.get("video"):
                     log(f"SUCCESS: Generated {result.get('video')}")
             else:

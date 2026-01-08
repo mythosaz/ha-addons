@@ -42,8 +42,8 @@ options:
   custom_ffmpeg_args: ""
 
   # Output
-  output_dir: "/media/generated"
-  filename_prefix: "hud_display"
+  output_dir: "/media/post_informer"
+  filename_prefix: "post_informer"
 
 schema:
   # API Configuration
