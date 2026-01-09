@@ -1,6 +1,6 @@
 name: "Post Informer"
 description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
-version: "1.0.5"
+version: "1.0.6-pre-1"
 slug: "post_informer"
 init: false
 arch:
