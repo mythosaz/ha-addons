@@ -481,15 +481,17 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
             )
 
             # Extract the text from the response
+            # The response is in the output field
             prompt = None
-            for item in response.input:
-                if item.role == "assistant" and hasattr(item, 'content'):
-                    for content_item in item.content:
-                        if content_item.type == "output_text":
-                            prompt = content_item.text.strip()
-                            break
-                if prompt:
-                    break
+            if hasattr(response, 'output') and response.output:
+                for item in response.output:
+                    if hasattr(item, 'content'):
+                        for content_item in item.content:
+                            if hasattr(content_item, 'type') and content_item.type == "output_text":
+                                prompt = content_item.text.strip()
+                                break
+                    if prompt:
+                        break
 
             if not prompt:
                 raise Exception("No output_text found in Responses API response")
