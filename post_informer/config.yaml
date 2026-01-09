@@ -1,6 +1,6 @@
 name: "Post Informer"
 description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
-version: "1.0.2"
+version: "1.0.3"
 slug: "post_informer"
 init: false
 arch:
@@ -52,7 +52,7 @@ schema:
   image_model: str
 
   # Entity Monitoring
-  entity_ids: str
+  entity_ids: "list|str"
 
   # Prompt Customization
   use_default_prompts: bool
