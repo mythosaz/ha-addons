@@ -284,7 +284,7 @@ def gather_ha_entities(entity_ids: List[str]) -> Dict[str, Any]:
 def discover_location_info(all_states: List[Dict[str, Any]]) -> Dict[str, str]:
     """Discover timezone and location from HA entities"""
     location_info = {
-        "timezone": "America/New_York",  # Default fallback
+        "timezone": "America/Phoenix",  # Default fallback
         "location_name": None
     }
 
@@ -432,7 +432,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
     try:
-        # Using Responses API for web_search support
+        # Try Responses API first for web_search support
         url = "https://api.openai.com/v1/responses"
         headers = {
             "Authorization": f"Bearer {API_KEY}",
@@ -461,6 +461,25 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         }
 
         resp = requests.post(url, headers=headers, json=data, timeout=120)
+
+        # If Responses API fails, fall back to Chat Completions without web_search
+        if resp.status_code == 400:
+            error_detail = resp.json() if resp.text else {}
+            log(f"Responses API failed with 400: {error_detail}")
+            log("Falling back to Chat Completions API without web_search...")
+
+            url = "https://api.openai.com/v1/chat/completions"
+            data = {
+                "model": PROMPT_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": 4096,
+                "temperature": 1.0,
+            }
+            resp = requests.post(url, headers=headers, json=data, timeout=120)
+
         resp.raise_for_status()
         result = resp.json()
 
@@ -738,7 +757,7 @@ def run_pipeline() -> Dict[str, Any]:
     log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
 
     all_states = []
-    location_info = {"timezone": "America/New_York", "location_name": None}
+    location_info = {"timezone": "America/Phoenix", "location_name": None}
 
     if SUPERVISOR_TOKEN:
         try:
