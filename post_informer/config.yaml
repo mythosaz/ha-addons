@@ -52,7 +52,7 @@ schema:
   image_model: str
 
   # Entity Monitoring
-  entity_ids: "list|str"
+  entity_ids: str
 
   # Prompt Customization
   use_default_prompts: bool
