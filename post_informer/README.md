@@ -9,14 +9,18 @@ Post Informer is a complete pipeline that transforms your Home Assistant data in
 ### The Pipeline
 
 1. **Gather Context** - Collects state data from your configured HA entities (sensors, calendars, todo lists, etc.)
-2. **Generate Art Prompt** - Sends context to GPT-4o which creates a detailed image generation prompt
-3. **Render Image** - Uses GPT-image-1.5 to generate a high-resolution image (1536×1024)
-4. **Resize** - Scales the image to your target display resolution (4K, 1080p, 720p, 480p)
-5. **Create Video** - Converts the image to a looping video for continuous display
-6. **Fire Events** - Notifies Home Assistant when each step completes
+2. **Discover Location** - Automatically detects timezone and location from zone.home for local news
+3. **Generate Art Prompt** - Sends context to gpt-5.2 with web search enabled for current news integration
+4. **Render Image** - Uses gpt-image-1.5 to generate a high-resolution image (1536×1024)
+5. **Resize** - Scales the image to your target display resolution (4K, 1080p, 720p, 480p)
+6. **Create Video** - Converts the image to a looping video for continuous display
+7. **Fire Events** - Notifies Home Assistant when each step completes
 
 ### Features
 
+- **Web Search Integration**: AI searches current news (national + local) during prompt generation
+- **Location Auto-Discovery**: Automatically detects your timezone and location from Home Assistant
+- **Jinja2 Template Support**: Use templates in entity_ids for dynamic data extraction
 - **No timeout limits**: Runs as persistent service (bypasses shell_command timeouts)
 - **Fully automated pipeline**: One command triggers the entire workflow
 - **Highly configurable**: Customize prompts, models, resolutions, video settings
@@ -24,6 +28,7 @@ Post Informer is a complete pipeline that transforms your Home Assistant data in
 - **Event-driven**: Fires HA events for image complete, video complete, and pipeline complete
 - **Flexible entity selection**: Monitor any HA entities (weather, calendars, sensors, etc.)
 - **Multiple output formats**: Original high-res + resized images + video
+- **UTF-8 Support**: Properly handles special characters (°, etc.)
 
 ## Installation
 
@@ -54,7 +59,7 @@ entity_ids: |
 ```yaml
 # API Configuration
 openai_api_key: "sk-your-api-key-here"
-prompt_model: "gpt-4o"
+prompt_model: "gpt-5.2"
 image_model: "gpt-image-1.5"
 
 # Entity Monitoring
@@ -99,26 +104,35 @@ filename_prefix: "post_informer"
 #### API Configuration
 
 - **openai_api_key** (required): Your OpenAI API key
-- **prompt_model** (default: `gpt-4o`): Model for generating art prompts
+- **prompt_model** (default: `gpt-5.2`): Model for generating art prompts with web search
 - **image_model** (default: `gpt-image-1.5`): Model for rendering images
 
 #### Entity Monitoring
 
-- **entity_ids**: List of HA entity IDs to monitor
+- **entity_ids**: List of HA entity IDs or Jinja2 templates to monitor
   - Supports multiple formats:
+    - **Plain entity IDs**: `sensor.temperature`, `calendar.events`, `todo.tasks`
+    - **Jinja2 templates**: `{{ states('lock.front_door') }}`, `{{ state_attr('sensor.weather', 'temperature') }}`
     - **Newline-separated** (recommended): Use `|` or `|-` for literal newlines
     - **Space-separated**: Use `>-` (YAML folded scalar)
     - **Comma-separated**: `sensor.a, sensor.b, sensor.c`
-  - Examples: `sensor.temperature`, `calendar.events`, `todo.tasks`
+  - Mix and match plain IDs and templates as needed
   - Leave blank to skip entity gathering (you can still trigger with custom prompts)
 
 **Format Examples:**
 ```yaml
-# Newline-separated (recommended)
+# Plain entity IDs (recommended for full entity data)
 entity_ids: |
   sensor.weather_temperature
   calendar.family
   todo.shopping_list
+
+# With Jinja2 templates (for specific values)
+entity_ids: |
+  sensor.weather_temperature
+  lock.front_door
+  {{ states('lock.front_door') }}
+  Battery: {{ state_attr('lock.front_door', 'battery_level') }}%
 
 # Space-separated (YAML folded scalar)
 entity_ids: >-
