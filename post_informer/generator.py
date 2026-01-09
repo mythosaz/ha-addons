@@ -505,7 +505,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=4096,
+                max_completion_tokens=4096,
                 temperature=1.0
             )
 
