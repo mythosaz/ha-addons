@@ -432,8 +432,8 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
     try:
-        # Using Chat Completions API
-        url = "https://api.openai.com/v1/chat/completions"
+        # Using Responses API for web_search support
+        url = "https://api.openai.com/v1/responses"
         headers = {
             "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json",
