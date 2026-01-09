@@ -1,6 +1,6 @@
 name: "Post Informer"
 description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
-version: "1.0.3"
+version: "1.0.4"
 slug: "post_informer"
 init: false
 arch:
@@ -14,7 +14,7 @@ map:
 options:
   # API Configuration
   openai_api_key: ""
-  prompt_model: "gpt-4o"
+  prompt_model: "gpt-5.2"
   image_model: "gpt-image-1.5"
 
   # Entity Monitoring

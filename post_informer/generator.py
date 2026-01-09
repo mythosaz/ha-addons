@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.3-2026-01-08"
-BUILD_TIMESTAMP = "2026-01-08 03:00:00 UTC"
+BUILD_VERSION = "1.0.4-2026-01-09"
+BUILD_TIMESTAMP = "2026-01-09 08:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -37,7 +37,7 @@ BUILD_TIMESTAMP = "2026-01-08 03:00:00 UTC"
 
 # API Configuration
 API_KEY = os.environ.get("OPENAI_API_KEY", "")
-PROMPT_MODEL = os.environ.get("PROMPT_MODEL", "gpt-4o")
+PROMPT_MODEL = os.environ.get("PROMPT_MODEL", "gpt-5.2")
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1.5")
 
 # Entity Monitoring
@@ -432,58 +432,84 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
     try:
+        client = OpenAI(api_key=API_KEY)
+
         # Try Responses API first for web_search support
-        url = "https://api.openai.com/v1/responses"
-        headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        data = {
-            "model": PROMPT_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "max_tokens": 4096,
-            "temperature": 1.0,
-            "moderation": "low",
-            "tools": [
-                {
-                    "type": "web_search",
-                    "user_location": {
-                        "type": "approximate",
-                        "timezone": location_info["timezone"]
+        try:
+            log("Attempting Responses API with web_search...")
+            response = client.responses.create(
+                model=PROMPT_MODEL,
+                input=[
+                    {
+                        "role": "developer",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": system_prompt
+                            }
+                        ]
                     },
-                    "search_context_size": "medium"
-                }
-            ]
-        }
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": user_prompt
+                            }
+                        ]
+                    }
+                ],
+                text={
+                    "format": {"type": "text"},
+                    "verbosity": "medium"
+                },
+                reasoning={
+                    "effort": "medium",
+                    "summary": "auto"
+                },
+                tools=[
+                    {
+                        "type": "web_search",
+                        "user_location": {
+                            "type": "approximate",
+                            "timezone": location_info["timezone"]
+                        },
+                        "search_context_size": "medium"
+                    }
+                ],
+                store=True
+            )
 
-        resp = requests.post(url, headers=headers, json=data, timeout=120)
+            # Extract the text from the response
+            prompt = None
+            for item in response.input:
+                if item.role == "assistant" and hasattr(item, 'content'):
+                    for content_item in item.content:
+                        if content_item.type == "output_text":
+                            prompt = content_item.text.strip()
+                            break
+                if prompt:
+                    break
 
-        # If Responses API fails, fall back to Chat Completions without web_search
-        if resp.status_code == 400:
-            error_detail = resp.json() if resp.text else {}
-            log(f"Responses API failed with 400: {error_detail}")
+            if not prompt:
+                raise Exception("No output_text found in Responses API response")
+
+        except Exception as responses_error:
+            log(f"Responses API failed: {responses_error}")
             log("Falling back to Chat Completions API without web_search...")
 
-            url = "https://api.openai.com/v1/chat/completions"
-            data = {
-                "model": PROMPT_MODEL,
-                "messages": [
+            # Fall back to Chat Completions API
+            response = client.chat.completions.create(
+                model=PROMPT_MODEL,
+                messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "max_tokens": 4096,
-                "temperature": 1.0,
-            }
-            resp = requests.post(url, headers=headers, json=data, timeout=120)
+                max_tokens=4096,
+                temperature=1.0
+            )
 
-        resp.raise_for_status()
-        result = resp.json()
-
-        prompt = result["choices"][0]["message"]["content"].strip()
+            prompt = response.choices[0].message.content.strip()
 
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Generated prompt ({len(prompt)} chars)", timing=elapsed)
