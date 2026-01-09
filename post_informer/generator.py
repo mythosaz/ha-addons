@@ -11,17 +11,25 @@ import json
 import base64
 import requests
 import subprocess
+import re
 from pathlib import Path
 from datetime import datetime
 from openai import OpenAI
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
+
+# Jinja2 for template support
+try:
+    from jinja2 import Environment, Template
+    JINJA2_AVAILABLE = True
+except ImportError:
+    JINJA2_AVAILABLE = False
 
 # Ensure UTF-8 output for proper character encoding
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.2-2026-01-08"
-BUILD_TIMESTAMP = "2026-01-08 02:00:00 UTC"
+BUILD_VERSION = "1.0.3-2026-01-08"
+BUILD_TIMESTAMP = "2026-01-08 03:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -33,7 +41,14 @@ PROMPT_MODEL = os.environ.get("PROMPT_MODEL", "gpt-4o")
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1.5")
 
 # Entity Monitoring
-ENTITY_IDS = os.environ.get("ENTITY_IDS", "")
+# Note: HA may pass this as a JSON-encoded list or a string
+_entity_ids_raw = os.environ.get("ENTITY_IDS", "")
+try:
+    # Try to parse as JSON first (for list format from YAML)
+    ENTITY_IDS = json.loads(_entity_ids_raw)
+except (json.JSONDecodeError, TypeError):
+    # If not JSON, use as-is (string format)
+    ENTITY_IDS = _entity_ids_raw
 
 # Prompt Customization
 USE_DEFAULT_PROMPTS = os.environ.get("USE_DEFAULT_PROMPTS", "true").lower() == "true"
@@ -152,16 +167,14 @@ DEFAULT_USER_PROMPT_TEMPLATE = """Home Assistant data:
 {context}
 
 NEWS:
-Search the local and national news.
-Include any relevant, breaking or interesting news in the image.
+Search the internet for major headlines.{local_news_instruction}
+Should the national or local news include important or noteworthy items, consider them for inclusion.
 
-OUTPUT REQUIREMENT
-Return exactly one detailed image-1.5 prompt.
-Do not explain your reasoning.
-Do not restate this prompt.
-Do not play it safe.
-Commit to the scene.
+NOTE:
+This is a static image. Do not display the actual time. Reflect only in the art.
 
+TASK:
+Create exactly one highly detailed unconstrained image-1.5 prompt with no limit - Do not explain your reasoning.
 """
 
 # Resolution mapping (standard 16:9 aspect ratio)
@@ -267,32 +280,160 @@ def gather_ha_entities(entity_ids: List[str]) -> Dict[str, Any]:
 
     return entities
 
+
+def discover_location_info(all_states: List[Dict[str, Any]]) -> Dict[str, str]:
+    """Discover timezone and location from HA entities"""
+    location_info = {
+        "timezone": "America/New_York",  # Default fallback
+        "location_name": None
+    }
+
+    # Look for zone.home which has timezone and location info
+    for state in all_states:
+        entity_id = state.get("entity_id")
+
+        if entity_id == "zone.home":
+            attrs = state.get("attributes", {})
+            if "time_zone" in attrs:
+                location_info["timezone"] = attrs["time_zone"]
+            if "friendly_name" in attrs:
+                location_info["location_name"] = attrs["friendly_name"]
+            break
+
+    log(f"Discovered location: timezone={location_info['timezone']}, location={location_info['location_name']}")
+    return location_info
+
+
+def build_jinja2_context(all_states: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build Jinja2 context with HA template functions"""
+    # Create a dict mapping entity_id -> state object for quick lookup
+    states_dict = {s.get("entity_id"): s for s in all_states}
+
+    def states_func(entity_id: str) -> str:
+        """Return state value for entity"""
+        state_obj = states_dict.get(entity_id)
+        if state_obj:
+            return state_obj.get("state", "unknown")
+        return "unknown"
+
+    def state_attr_func(entity_id: str, attribute: str) -> Any:
+        """Return specific attribute for entity"""
+        state_obj = states_dict.get(entity_id)
+        if state_obj:
+            return state_obj.get("attributes", {}).get(attribute)
+        return None
+
+    def is_state_func(entity_id: str, state: str) -> bool:
+        """Check if entity is in specific state"""
+        return states_func(entity_id) == state
+
+    return {
+        "states": states_func,
+        "state_attr": state_attr_func,
+        "is_state": is_state_func,
+    }
+
+
+def process_entity_config(entity_config: Union[str, List[str]], all_states: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Process entity_ids config - handles plain IDs, templates, and mixed formats"""
+    result = {}
+
+    # Parse into list
+    if isinstance(entity_config, list):
+        entity_list = entity_config
+    else:
+        # Support legacy string formats
+        entity_list = [e.strip() for e in entity_config.split('\n') if e.strip()]
+        if not entity_list or len(entity_list) == 1:
+            entity_list = [e.strip() for e in entity_config.split(',') if e.strip()]
+        if not entity_list or len(entity_list) == 1:
+            entity_list = [e.strip() for e in entity_config.split() if e.strip()]
+
+    # Build state lookup dict
+    states_dict = {s.get("entity_id"): s for s in all_states}
+
+    # Separate plain entity IDs from templates
+    plain_ids = []
+    templates = []
+
+    for item in entity_list:
+        item = item.strip()
+        if not item:
+            continue
+
+        # Check if it's a Jinja2 template
+        if re.search(r'\{\{.*?\}\}', item):
+            templates.append(item)
+        else:
+            plain_ids.append(item)
+
+    # Process plain entity IDs
+    for entity_id in plain_ids:
+        state_obj = states_dict.get(entity_id)
+        if state_obj:
+            result[entity_id] = {
+                "state": state_obj.get("state"),
+                "attributes": state_obj.get("attributes", {}),
+                "last_changed": state_obj.get("last_changed"),
+            }
+
+    # Process templates if Jinja2 is available
+    if templates and JINJA2_AVAILABLE:
+        log(f"Processing {len(templates)} Jinja2 templates...")
+        jinja_context = build_jinja2_context(all_states)
+        env = Environment()
+
+        for template_str in templates:
+            try:
+                template = env.from_string(template_str)
+                rendered = template.render(jinja_context)
+                result[template_str] = {"rendered_value": rendered}
+                log(f"Rendered: {template_str[:50]}... -> {rendered}")
+            except Exception as e:
+                log(f"Error rendering template '{template_str[:50]}...': {e}")
+                result[template_str] = {"error": str(e)}
+    elif templates and not JINJA2_AVAILABLE:
+        log("Warning: Jinja2 templates found but jinja2 library not available")
+        for template_str in templates:
+            result[template_str] = {"error": "jinja2 not installed"}
+
+    return result
+
 # ============================================================================
 # PIPELINE STEPS
 # ============================================================================
 
-def generate_prompt_from_context(context: Dict[str, Any]) -> Optional[str]:
+def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[str, str]) -> Optional[str]:
     """Call OpenAI to generate an image prompt based on HA context"""
     start_time = datetime.now()
+
+    # Build local news instruction based on location
+    local_news_instruction = ""
+    if location_info.get("location_name"):
+        local_news_instruction = f"\nSearch the internet for local {location_info['location_name']} news."
 
     # Choose prompts
     if USE_DEFAULT_PROMPTS:
         system_prompt = DEFAULT_SYSTEM_PROMPT
         user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
-            context=json.dumps(context, indent=2)
+            context=json.dumps(context, indent=2),
+            local_news_instruction=local_news_instruction
         )
     else:
         system_prompt = CUSTOM_SYSTEM_PROMPT
         user_prompt = CUSTOM_USER_PROMPT.format(
-            context=json.dumps(context, indent=2)
+            context=json.dumps(context, indent=2),
+            local_news_instruction=local_news_instruction
         )
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
     log(f"Context size: {len(json.dumps(context))} chars")
+    if location_info.get("location_name"):
+        log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
     try:
-        # Note: Using the Responses API format from user's example
-        url = "https://api.openai.com/v1/chat/completions"
+        # Using Responses API for web_search support
+        url = "https://api.openai.com/v1/responses"
         headers = {
             "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json",
@@ -306,6 +447,17 @@ def generate_prompt_from_context(context: Dict[str, Any]) -> Optional[str]:
             ],
             "max_tokens": 4096,
             "temperature": 1.0,
+            "moderation": "low",
+            "tools": [
+                {
+                    "type": "web_search",
+                    "user_location": {
+                        "type": "approximate",
+                        "timezone": location_info["timezone"]
+                    },
+                    "search_context_size": "medium"
+                }
+            ]
         }
 
         resp = requests.post(url, headers=headers, json=data, timeout=120)
@@ -582,31 +734,43 @@ def run_pipeline() -> Dict[str, Any]:
     output_path = Path(OUTPUT_DIR)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Gather HA entities
+    # Step 1: Get all HA states and discover location
     log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
 
-    # Parse entity IDs - support multiple formats:
-    # - Newline separated
-    # - Comma separated
-    # - Space separated (YAML folded scalar >- converts newlines to spaces)
-    entity_list = [e.strip() for e in ENTITY_IDS.split('\n') if e.strip()]
-    if not entity_list or len(entity_list) == 1:
-        # Try comma-separated
-        entity_list = [e.strip() for e in ENTITY_IDS.split(',') if e.strip()]
-    if not entity_list or len(entity_list) == 1:
-        # Try space-separated (YAML folded scalars)
-        entity_list = [e.strip() for e in ENTITY_IDS.split() if e.strip()]
+    all_states = []
+    location_info = {"timezone": "America/New_York", "location_name": None}
 
-    log(f"Parsed {len(entity_list)} entity IDs from config")
+    if SUPERVISOR_TOKEN:
+        try:
+            # Get all states from HA
+            resp = requests.get(
+                f"{SUPERVISOR_API}/states",
+                headers={
+                    "Authorization": f"Bearer {SUPERVISOR_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                timeout=10
+            )
+            resp.raise_for_status()
+            all_states = resp.json()
+            log(f"Retrieved {len(all_states)} total states from HA")
 
-    context = gather_ha_entities(entity_list)
+            # Discover location info
+            location_info = discover_location_info(all_states)
+        except Exception as e:
+            log(f"Error fetching HA states: {e}")
+    else:
+        log("Warning: No SUPERVISOR_TOKEN, cannot fetch HA states")
+
+    # Step 2: Process entity config (supports plain IDs, templates, and mixed)
+    context = process_entity_config(ENTITY_IDS, all_states)
     result["steps"]["gather_entities"] = {
         "count": len(context),
         "entity_ids": list(context.keys())
     }
 
-    # Step 2: Generate art prompt
-    art_prompt = generate_prompt_from_context(context)
+    # Step 3: Generate art prompt
+    art_prompt = generate_prompt_from_context(context, location_info)
     if not art_prompt:
         result["error"] = "Failed to generate art prompt"
         log("PIPELINE FAILED: No art prompt generated")
@@ -617,7 +781,7 @@ def run_pipeline() -> Dict[str, Any]:
         "prompt": art_prompt  # Store full prompt, not preview
     }
 
-    # Step 3: Generate image (temporary file)
+    # Step 4: Generate image (temporary file)
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
     temp_filename = f"{FILENAME_PREFIX}_temp.png"
 
@@ -630,7 +794,7 @@ def run_pipeline() -> Dict[str, Any]:
     result["steps"]["generate_image"] = image_result
     temp_image_path = image_result["filepath"]
 
-    # Step 4: Archive original with metadata (if save_original enabled)
+    # Step 5: Archive original with metadata (if save_original enabled)
     archive_path = None
     if SAVE_ORIGINAL:
         archive_dir = output_path / "archive"
@@ -660,7 +824,7 @@ def run_pipeline() -> Dict[str, Any]:
         import shutil
         shutil.copy2(archive_path, temp_image_path)
 
-    # Step 5: Resize to working image
+    # Step 6: Resize to working image
     working_image_path = str(output_path / f"{FILENAME_PREFIX}.png")
 
     if RESIZE_OUTPUT:
@@ -693,7 +857,7 @@ def run_pipeline() -> Dict[str, Any]:
         "timestamp": result["timestamp"]
     })
 
-    # Step 6: Create video (if enabled)
+    # Step 7: Create video (if enabled)
     if ENABLE_VIDEO:
         video_path = str(output_path / f"{FILENAME_PREFIX}.mp4")
 
