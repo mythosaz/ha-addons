@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-8"
-BUILD_TIMESTAMP = "2026-01-10 16:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-9"
+BUILD_TIMESTAMP = "2026-01-10 17:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -422,18 +422,38 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
         while i < len(entity_list):
             item = entity_list[i]
             is_template = bool(re.search(r'\{[%{]', item))
+            is_entity_id = re.match(r'^[a-z_]+\.[a-z0-9_]+$', item)
 
-            if is_template:
+            if is_entity_id:
+                # Plain entity ID - add it and move on
+                merged_list.append(item)
+                i += 1
+            elif is_template:
                 # Start collecting adjacent templates
-                template_parts = [item]
+                # First, look BACKWARD for any preceding non-entity text
+                template_parts = []
+                k = len(merged_list) - 1
+                while k >= 0:
+                    prev_item = merged_list[k]
+                    prev_is_entity = re.match(r'^[a-z_]+\.[a-z0-9_]+$', prev_item)
+                    prev_is_template = bool(re.search(r'\{[%{]', prev_item))
+
+                    if prev_is_entity or prev_is_template:
+                        # Hit an entity or template, stop looking back
+                        break
+                    else:
+                        # Non-entity text, prepend it
+                        template_parts.insert(0, merged_list.pop())
+                        k -= 1
+
+                # Add current template
+                template_parts.append(item)
                 j = i + 1
 
                 # Look ahead for more templates, collecting any non-entity text between them
                 while j < len(entity_list):
                     next_item = entity_list[j]
                     is_next_template = bool(re.search(r'\{[%{]', next_item))
-
-                    # Check if next_item looks like an entity ID
                     is_entity_id = re.match(r'^[a-z_]+\.[a-z0-9_]+$', next_item)
 
                     if is_entity_id:
@@ -453,10 +473,8 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
                 merged_list.append(merged_template)
                 i = j
             else:
-                # Check if it's a real entity ID
-                if re.match(r'^[a-z_]+\.[a-z0-9_]+$', item):
-                    merged_list.append(item)
-                # Skip other non-entity junk (labels, punctuation, etc.)
+                # Non-entity, non-template text (will be collected by next template or entity)
+                merged_list.append(item)
                 i += 1
 
         entity_list = merged_list
