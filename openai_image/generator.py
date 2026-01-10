@@ -100,6 +100,7 @@ def generate_image(prompt: str, filename: str = None, model: str = None,
             "n": 1,
             "size": size,
             "quality": quality,
+            "moderation": "low",
         }
 
         # output_format only supported for gpt-image models
