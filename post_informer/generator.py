@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-4"
-BUILD_TIMESTAMP = "2026-01-10 00:30:00 UTC"
+BUILD_VERSION = "1.0.6-pre-5"
+BUILD_TIMESTAMP = "2026-01-10 01:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -341,12 +341,46 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
     if isinstance(entity_config, list):
         entity_list = entity_config
     else:
-        # Support legacy string formats
-        entity_list = [e.strip() for e in entity_config.split('\n') if e.strip()]
-        if not entity_list or len(entity_list) == 1:
-            entity_list = [e.strip() for e in entity_config.split(',') if e.strip()]
-        if not entity_list or len(entity_list) == 1:
-            entity_list = [e.strip() for e in entity_config.split() if e.strip()]
+        # Smart parsing for string format that handles multi-line templates
+        entity_list = []
+        lines = entity_config.split('\n')
+        current_template = []
+        template_depth = 0  # Track {%/%} and {{/}} balance
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Check if this line contains template markers
+            has_template_marker = bool(re.search(r'\{[%{]', line))
+
+            if has_template_marker or template_depth > 0:
+                # We're building a template
+                current_template.append(line)
+
+                # Count opening and closing markers
+                template_depth += line.count('{%') + line.count('{{')
+                template_depth -= line.count('%}') + line.count('}}')
+
+                # If balanced, we have a complete template
+                if template_depth == 0 and current_template:
+                    entity_list.append(' '.join(current_template))
+                    current_template = []
+            else:
+                # Plain entity ID(s) - could be comma or space separated
+                if ',' in line:
+                    entity_list.extend([e.strip() for e in line.split(',') if e.strip()])
+                elif ' ' in line:
+                    entity_list.extend([e.strip() for e in line.split() if e.strip()])
+                else:
+                    entity_list.append(line)
+
+        # Don't forget incomplete template at end (error case but handle gracefully)
+        if current_template:
+            incomplete = ' '.join(current_template)
+            log(f"Warning: Incomplete template detected (unbalanced markers): {incomplete[:80]}...")
+            entity_list.append(incomplete)
 
     # Build state lookup dict
     states_dict = {s.get("entity_id"): s for s in all_states}
@@ -360,8 +394,8 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
         if not item:
             continue
 
-        # Check if it's a Jinja2 template
-        if re.search(r'\{\{.*?\}\}', item):
+        # Check if it's a Jinja2 template (look for {% or {{)
+        if re.search(r'\{[%{]', item):
             templates.append(item)
         else:
             plain_ids.append(item)
@@ -487,31 +521,8 @@ def run_startup_entity_scan():
         log(f"Processing entity configuration...")
         context = process_entity_config(ENTITY_IDS, all_states)
 
-        # Show what will be exposed
+        # Show what will be exposed (includes any missing entity warnings)
         log_entity_exposure(context)
-
-        # Show missing entities warning (this is already done in process_entity_config
-        # for templates, but we should also check plain entity IDs)
-        if isinstance(ENTITY_IDS, list):
-            entity_list = ENTITY_IDS
-        else:
-            entity_list = [e.strip() for e in ENTITY_IDS.split('\n') if e.strip()]
-            if not entity_list or len(entity_list) == 1:
-                entity_list = [e.strip() for e in ENTITY_IDS.split(',') if e.strip()]
-            if not entity_list or len(entity_list) == 1:
-                entity_list = [e.strip() for e in ENTITY_IDS.split() if e.strip()]
-
-        # Filter to plain IDs (non-templates)
-        plain_ids = [e for e in entity_list if not re.search(r'\{\{.*?\}\}', e)]
-
-        if plain_ids:
-            found_ids = [k for k in context.keys() if k in plain_ids]
-            if len(found_ids) < len(plain_ids):
-                missing = set(plain_ids) - set(found_ids)
-                log("=" * 60)
-                log(f"⚠️  WARNING: Could not find {len(missing)} entities!")
-                log(f"⚠️  Missing entities: {sorted(missing)}")
-                log("=" * 60)
 
     except Exception as e:
         log(f"❌ Error during startup entity scan: {e}")
