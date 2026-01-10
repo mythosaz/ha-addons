@@ -334,7 +334,14 @@ def build_jinja2_context(all_states: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def process_entity_config(entity_config: Union[str, List[str]], all_states: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Process entity_ids config - handles plain IDs, templates, and mixed formats"""
+    """Process entity_ids config - handles plain IDs, templates, and mixed formats
+
+    Note: This parser uses depth tracking to separate templates from plain entity IDs.
+    Edge case: Literal {{ or {% inside Jinja2 strings will confuse the depth counter.
+    Example: {{ "Price is {{ value }}" }} will be flagged as incomplete.
+    Workaround: Escape braces in strings: {{ "Price is \{\{ value \}\}" }}
+    This edge case is rare enough that the warning message will catch it.
+    """
     result = {}
 
     # Parse into list
