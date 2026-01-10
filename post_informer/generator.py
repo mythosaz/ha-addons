@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.5-2026-01-09"
-BUILD_TIMESTAMP = "2026-01-09 08:30:00 UTC"
+BUILD_VERSION = "1.0.6-pre-3"
+BUILD_TIMESTAMP = "2026-01-10 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -397,6 +397,126 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
             result[template_str] = {"error": "jinja2 not installed"}
 
     return result
+
+
+def log_entity_exposure(context: Dict[str, Any], show_missing: bool = True):
+    """Log what entity data will be exposed - for transparency and debugging"""
+    if not context:
+        log("=" * 60)
+        log("ENTITY EXPOSURE: No entities configured")
+        log("=" * 60)
+        return
+
+    log("=" * 60)
+    log("ENTITY EXPOSURE - Privacy & Debugging Info")
+    log("=" * 60)
+    log(f"Total entities/templates: {len(context)}")
+    log("")
+
+    for key, value in context.items():
+        # Check if this is a template or plain entity
+        if "rendered_value" in value:
+            # Jinja2 template
+            log(f"📝 Template: {key[:80]}{'...' if len(key) > 80 else ''}")
+            log(f"   → Rendered: {value['rendered_value']}")
+        elif "error" in value:
+            # Template with error
+            log(f"❌ Template (ERROR): {key[:80]}{'...' if len(key) > 80 else ''}")
+            log(f"   → Error: {value['error']}")
+        else:
+            # Plain entity
+            log(f"🏠 Entity: {key}")
+            log(f"   State: {value.get('state', 'unknown')}")
+
+            # Log key attributes (skip internal/verbose ones)
+            attrs = value.get('attributes', {})
+            if attrs:
+                # Filter to most relevant attributes
+                skip_attrs = {'entity_picture', 'icon', 'supported_features',
+                             'device_class', 'state_class', 'last_reset'}
+                relevant_attrs = {k: v for k, v in attrs.items()
+                                 if k not in skip_attrs and not k.startswith('_')}
+
+                if relevant_attrs:
+                    log(f"   Attributes:")
+                    for attr_key, attr_val in list(relevant_attrs.items())[:5]:  # Limit to 5
+                        # Truncate long values
+                        val_str = str(attr_val)
+                        if len(val_str) > 60:
+                            val_str = val_str[:60] + "..."
+                        log(f"     • {attr_key}: {val_str}")
+
+                    if len(relevant_attrs) > 5:
+                        log(f"     ... and {len(relevant_attrs) - 5} more attributes")
+
+    log("=" * 60)
+
+
+def run_startup_entity_scan():
+    """Run entity scan at startup for transparency and debugging"""
+    log("=" * 60)
+    log("STARTUP ENTITY SCAN")
+    log("=" * 60)
+
+    if not SUPERVISOR_TOKEN:
+        log("⚠️  No SUPERVISOR_TOKEN - cannot scan entities")
+        log("=" * 60)
+        return
+
+    if not ENTITY_IDS:
+        log("⚠️  No entity_ids configured")
+        log("=" * 60)
+        return
+
+    try:
+        # Fetch all states
+        log("Fetching all Home Assistant states...")
+        resp = requests.get(
+            f"{SUPERVISOR_API}/states",
+            headers={
+                "Authorization": f"Bearer {SUPERVISOR_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            timeout=10
+        )
+        resp.raise_for_status()
+        all_states = resp.json()
+        log(f"Retrieved {len(all_states)} total states from HA")
+
+        # Process entity config
+        log(f"Processing entity configuration...")
+        context = process_entity_config(ENTITY_IDS, all_states)
+
+        # Show what will be exposed
+        log_entity_exposure(context)
+
+        # Show missing entities warning (this is already done in process_entity_config
+        # for templates, but we should also check plain entity IDs)
+        if isinstance(ENTITY_IDS, list):
+            entity_list = ENTITY_IDS
+        else:
+            entity_list = [e.strip() for e in ENTITY_IDS.split('\n') if e.strip()]
+            if not entity_list or len(entity_list) == 1:
+                entity_list = [e.strip() for e in ENTITY_IDS.split(',') if e.strip()]
+            if not entity_list or len(entity_list) == 1:
+                entity_list = [e.strip() for e in ENTITY_IDS.split() if e.strip()]
+
+        # Filter to plain IDs (non-templates)
+        plain_ids = [e for e in entity_list if not re.search(r'\{\{.*?\}\}', e)]
+
+        if plain_ids:
+            found_ids = [k for k in context.keys() if k in plain_ids]
+            if len(found_ids) < len(plain_ids):
+                missing = set(plain_ids) - set(found_ids)
+                log("=" * 60)
+                log(f"⚠️  WARNING: Could not find {len(missing)} entities!")
+                log(f"⚠️  Missing entities: {sorted(missing)}")
+                log("=" * 60)
+
+    except Exception as e:
+        log(f"❌ Error during startup entity scan: {e}")
+        log("=" * 60)
+
 
 # ============================================================================
 # PIPELINE STEPS
@@ -824,6 +944,9 @@ def run_pipeline() -> Dict[str, Any]:
         "entity_ids": list(context.keys())
     }
 
+    # Log what will be exposed for this generation
+    log_entity_exposure(context)
+
     # Step 3: Generate art prompt
     art_prompt = generate_prompt_from_context(context, location_info)
     if not art_prompt:
@@ -973,6 +1096,13 @@ def main():
 
     if not API_KEY:
         log("ERROR: No OpenAI API key configured!")
+
+    # Run startup entity scan for transparency and debugging
+    run_startup_entity_scan()
+
+    log("=" * 60)
+    log("Ready - waiting for generate commands via stdin...")
+    log("=" * 60)
 
     # Read stdin line by line forever
     for line in sys.stdin:
