@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-5"
-BUILD_TIMESTAMP = "2026-01-10 01:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-6"
+BUILD_TIMESTAMP = "2026-01-10 14:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -341,46 +341,75 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
     if isinstance(entity_config, list):
         entity_list = entity_config
     else:
-        # Smart parsing for string format that handles multi-line templates
+        # Smart parsing that handles multiple templates mixed with plain entity IDs
         entity_list = []
-        lines = entity_config.split('\n')
-        current_template = []
-        template_depth = 0  # Track {%/%} and {{/}} balance
 
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+        # Normalize whitespace - convert newlines to spaces for easier parsing
+        config_str = ' '.join(entity_config.split())
 
-            # Check if this line contains template markers
-            has_template_marker = bool(re.search(r'\{[%{]', line))
+        # Parse character by character to separate templates from plain text
+        i = 0
+        current_token = []
+        template_depth = 0
+        in_template = False
 
-            if has_template_marker or template_depth > 0:
-                # We're building a template
-                current_template.append(line)
+        while i < len(config_str):
+            char = config_str[i]
 
-                # Count opening and closing markers
-                template_depth += line.count('{%') + line.count('{{')
-                template_depth -= line.count('%}') + line.count('}}')
+            # Check for template start markers
+            if i < len(config_str) - 1:
+                two_char = config_str[i:i+2]
 
-                # If balanced, we have a complete template
-                if template_depth == 0 and current_template:
-                    entity_list.append(' '.join(current_template))
-                    current_template = []
-            else:
-                # Plain entity ID(s) - could be comma or space separated
-                if ',' in line:
-                    entity_list.extend([e.strip() for e in line.split(',') if e.strip()])
-                elif ' ' in line:
-                    entity_list.extend([e.strip() for e in line.split() if e.strip()])
-                else:
-                    entity_list.append(line)
+                if two_char in ('{{', '{%'):
+                    # Starting a template
+                    if not in_template:
+                        # Save any accumulated non-template text as entity IDs
+                        if current_token:
+                            text = ''.join(current_token).strip()
+                            if text:
+                                # Split on spaces/commas
+                                for item in re.split(r'[,\s]+', text):
+                                    if item.strip():
+                                        entity_list.append(item.strip())
+                            current_token = []
+                        in_template = True
 
-        # Don't forget incomplete template at end (error case but handle gracefully)
-        if current_template:
-            incomplete = ' '.join(current_template)
-            log(f"Warning: Incomplete template detected (unbalanced markers): {incomplete[:80]}...")
-            entity_list.append(incomplete)
+                    template_depth += 1
+                    current_token.append(two_char)
+                    i += 2
+                    continue
+
+                elif two_char in ('}}', '%}'):
+                    # Ending a template marker
+                    template_depth -= 1
+                    current_token.append(two_char)
+                    i += 2
+
+                    # If we've balanced all markers, this template is complete
+                    if template_depth == 0 and in_template:
+                        template = ''.join(current_token).strip()
+                        if template:
+                            entity_list.append(template)
+                        current_token = []
+                        in_template = False
+                    continue
+
+            # Regular character - just accumulate
+            current_token.append(char)
+            i += 1
+
+        # Handle any remaining content
+        if current_token:
+            text = ''.join(current_token).strip()
+            if in_template:
+                # Incomplete template
+                log(f"Warning: Incomplete template detected (unbalanced markers): {text[:80]}...")
+                entity_list.append(text)
+            elif text:
+                # Plain entity IDs
+                for item in re.split(r'[,\s]+', text):
+                    if item.strip():
+                        entity_list.append(item.strip())
 
     # Build state lookup dict
     states_dict = {s.get("entity_id"): s for s in all_states}
