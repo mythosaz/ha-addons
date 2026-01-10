@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-7"
-BUILD_TIMESTAMP = "2026-01-10 15:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-8"
+BUILD_TIMESTAMP = "2026-01-10 16:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -414,6 +414,52 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
                 for item in re.split(r'[,\s]+', text):
                     if item.strip():
                         entity_list.append(item.strip())
+
+        # Second pass: merge adjacent templates separated only by non-entity text
+        # This handles cases where templates have labels/text mixed in
+        merged_list = []
+        i = 0
+        while i < len(entity_list):
+            item = entity_list[i]
+            is_template = bool(re.search(r'\{[%{]', item))
+
+            if is_template:
+                # Start collecting adjacent templates
+                template_parts = [item]
+                j = i + 1
+
+                # Look ahead for more templates, collecting any non-entity text between them
+                while j < len(entity_list):
+                    next_item = entity_list[j]
+                    is_next_template = bool(re.search(r'\{[%{]', next_item))
+
+                    # Check if next_item looks like an entity ID
+                    is_entity_id = re.match(r'^[a-z_]+\.[a-z0-9_]+$', next_item)
+
+                    if is_entity_id:
+                        # Found a real entity ID, stop merging
+                        break
+                    elif is_next_template:
+                        # Another template, add it
+                        template_parts.append(next_item)
+                        j += 1
+                    else:
+                        # Non-entity text (like "sun", "°", etc.), include it and keep looking
+                        template_parts.append(next_item)
+                        j += 1
+
+                # Merge all parts into one template
+                merged_template = ' '.join(template_parts)
+                merged_list.append(merged_template)
+                i = j
+            else:
+                # Check if it's a real entity ID
+                if re.match(r'^[a-z_]+\.[a-z0-9_]+$', item):
+                    merged_list.append(item)
+                # Skip other non-entity junk (labels, punctuation, etc.)
+                i += 1
+
+        entity_list = merged_list
 
     # Build state lookup dict
     states_dict = {s.get("entity_id"): s for s in all_states}
