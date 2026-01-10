@@ -470,8 +470,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
                     {
                         "type": "web_search",
                         "user_location": {
-                            "type": "approximate",
-                            "timezone": location_info["timezone"]
+                            "type": "approximate"
                         },
                         "search_context_size": "medium"
                     }
@@ -482,15 +481,30 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
             # Extract the text from the response
             # The response is in the output field
             prompt = None
-            if hasattr(response, 'output') and response.output:
+            tokens_used = {"input": 0, "output": 0, "total": 0}
+
+            # Parse response output
+            if hasattr(response, 'output') and response.output is not None:
                 for item in response.output:
-                    if hasattr(item, 'content'):
+                    if hasattr(item, 'content') and item.content:
                         for content_item in item.content:
                             if hasattr(content_item, 'type') and content_item.type == "output_text":
-                                prompt = content_item.text.strip()
-                                break
+                                if hasattr(content_item, 'text'):
+                                    prompt = content_item.text.strip()
+                                    break
                     if prompt:
                         break
+
+            # Capture token usage
+            if hasattr(response, 'usage'):
+                usage = response.usage
+                if hasattr(usage, 'input_tokens'):
+                    tokens_used["input"] = usage.input_tokens
+                if hasattr(usage, 'output_tokens'):
+                    tokens_used["output"] = usage.output_tokens
+                if hasattr(usage, 'total_tokens'):
+                    tokens_used["total"] = usage.total_tokens
+                log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
 
             if not prompt:
                 raise Exception("No output_text found in Responses API response")
