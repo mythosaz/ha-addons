@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-6"
-BUILD_TIMESTAMP = "2026-01-10 14:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-7"
+BUILD_TIMESTAMP = "2026-01-10 15:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -348,24 +348,21 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
     if isinstance(entity_config, list):
         entity_list = entity_config
     else:
-        # Smart parsing that handles multiple templates mixed with plain entity IDs
+        # Character-by-character parser for templates mixed with entity IDs
+        # Parse the config string as-is (don't normalize whitespace first!)
         entity_list = []
 
-        # Normalize whitespace - convert newlines to spaces for easier parsing
-        config_str = ' '.join(entity_config.split())
-
-        # Parse character by character to separate templates from plain text
         i = 0
         current_token = []
         template_depth = 0
         in_template = False
 
-        while i < len(config_str):
-            char = config_str[i]
+        while i < len(entity_config):
+            char = entity_config[i]
 
-            # Check for template start markers
-            if i < len(config_str) - 1:
-                two_char = config_str[i:i+2]
+            # Check for template start/end markers
+            if i < len(entity_config) - 1:
+                two_char = entity_config[i:i+2]
 
                 if two_char in ('{{', '{%'):
                     # Starting a template
