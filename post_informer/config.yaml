@@ -24,6 +24,7 @@ options:
   use_default_prompts: true
   custom_system_prompt: ""
   custom_user_prompt: ""
+  search_prompts: []
 
   # Image Configuration
   image_quality: "high"
@@ -58,6 +59,7 @@ schema:
   use_default_prompts: bool
   custom_system_prompt: str
   custom_user_prompt: str
+  search_prompts: list(str?)
 
   # Image Configuration
   image_quality: list(low|medium|high|auto)

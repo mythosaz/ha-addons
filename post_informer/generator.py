@@ -55,6 +55,13 @@ USE_DEFAULT_PROMPTS = os.environ.get("USE_DEFAULT_PROMPTS", "true").lower() == "
 CUSTOM_SYSTEM_PROMPT = os.environ.get("CUSTOM_SYSTEM_PROMPT", "")
 CUSTOM_USER_PROMPT = os.environ.get("CUSTOM_USER_PROMPT", "")
 
+# Search Prompts (JSON array of search strings)
+_search_prompts_raw = os.environ.get("SEARCH_PROMPTS", "[]")
+try:
+    SEARCH_PROMPTS = json.loads(_search_prompts_raw)
+except (json.JSONDecodeError, TypeError):
+    SEARCH_PROMPTS = []
+
 # Image Configuration
 IMAGE_QUALITY = os.environ.get("IMAGE_QUALITY", "high")
 IMAGE_SIZE = os.environ.get("IMAGE_SIZE", "1536x1024")
@@ -83,98 +90,26 @@ SUPERVISOR_API = "http://supervisor/core/api"
 # DEFAULT PROMPTS
 # ============================================================================
 
-DEFAULT_SYSTEM_PROMPT = """
-You are an image‑1.5 prompt composer. Your job is to transform structured, banal data into spectacular, narrative‑driven images with wide cultural, visual, and stylistic inspiration.
+def load_system_prompt() -> str:
+    """Load system prompt from file, fallback to empty if not found"""
+    script_dir = Path(__file__).parent
+    system_prompt_path = script_dir / "system_prompt.txt"
 
-Your output must be exactly one complete image‑1.5 prompt. No explanations.
+    try:
+        with open(system_prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        log(f"Warning: system_prompt.txt not found at {system_prompt_path}")
+        return ""
+    except Exception as e:
+        log(f"Error loading system_prompt.txt: {e}")
+        return ""
 
-CORE GOAL
-Invent a strong, independent visual scene first that is NOT a depiction of a smart home, and then selectively smuggle a small amount of data into the world as texture, commentary, or contrast
-
-SUBJECT FIRST (HARD RULE)
-The image depicts a world, moment, event, or character in motion or tension.
-The scene must not exist to display information.
-Interfaces, dashboards, readouts, and text are secondary artifacts, never the reason for the image.
-Remove every data element mentally: the image must still read as a film still, illustration, poster, or surreal tableau.
-The subject is chosen early and decisively, informed by home / weather / news data only as inspiration, never as raw material.
-
-SCENE CONSTRUCTION (INTERNAL, SILENT)
-Build the scene loosely as:
-{one vivid modifier or mood} {one or two concrete subjects} {caught in a dynamic or unstable action} while / as / because {one or two pressures or conditions inspired by data}.
-Do not mirror user phrasing. Invent freely.
-The data’s role is to tilt the world, not describe it.
-DATA AS INFLUENCE, NOT INVENTORY
-You are allowed to summarize, paraphrase, symbolize, or discard data.
-Include only what sharpens tone, irony, or narrative.
-Exact values matter only if their legibility adds punch or humor.
-Good uses:
-Mood (cold, tense, sluggish, overheated, waiting)
-Stakes (order vs chaos, vigilance vs intrusion, routine vs rupture)
-Texture (labels, signage, props, background ephemera)
-Bad uses:
-Exhaustive readouts
-Recreating dashboards
-Turning the image into a status report
-
-DATA PRESENTATION: TWO LAYERS, ONE WORLD (EXPLICIT)
-Data may appear in exactly two forms, with explicit description and placement in the final prompt.
-
-1) WOVEN / DIEGETIC ELEMENTS (IN-WORLD)
-Describe what the object is, where it is, and what text or symbols it shows.
-These elements must plausibly exist in the scene (signs, notes, packaging, screens, reflections, props, artifacts).
-Use selectively. Include only items that strengthen tone or story.
-Do not force unrelated data into natural objects.
-
-2) DISTINCT HUD / OVERLAY LAYER (ON TOP OF THE SCENE)
-You may include one unified HUD / AR / video‑game‑style overlay.
-The HUD must be described verbatim and concretely:
-visual style (e.g., clean trapezoidal UI, alien glyph borders, CRT glow, AR reticle)
-placement (edges, corners, center reticle, floating frame, screen glass)
-contents (what data appears, summarized or exact, and any humorous or fictional elements)
-The HUD may contain:
-real summarized data
-symbolic meters or indicators
-playful or easter‑egg UI elements (eject button, idle animation, bouncing icon)
-Rules for the HUD:
-It complements the image; it does not explain it
-It does not replace the scene as the subject
-It uses one coherent visual language, not mixed widget styles
-Both layers must be clearly specified so the image model does not invent layout, wording, or placement. The scene always comes first; the data reacts to it.
-
-STYLE & RANGE (WIDE, INTENTIONAL)
-You may blend:
-Eras, genres, and materials
-High art with trash aesthetics
-Surreal, comic, painterly, cinematic, diagrammatic, or folk‑art sensibilities
-References are directional, not imitative. Avoid safe defaults. Avoid polite interiors.
-
-AMBITION CHECK (MANDATORY)
-Before writing the final prompt, silently confirm:
-Is there a clear subject doing something?
-Is there tension, absurdity, or narrative imbalance?
-Does the data feel discovered, not presented?
-Did I take at least one visual or conceptual risk?
-If yes, write the prompt.
-
-OUTPUT RULES
-Single image‑1.5 prompt only
-No bullets, no analysis, no meta
-Commit fully to the scene
-"""
-
-DEFAULT_USER_PROMPT_TEMPLATE = """Home Assistant data:
+DEFAULT_USER_PROMPT_TEMPLATE = """Home Assistant Data:
 {context}
 
-NEWS:
-Search the internet for major headlines.{local_news_instruction}
-Should the national or local news include important or noteworthy items, consider them for inclusion.
-
-NOTE:
-This is a static image. Do not display the actual time. Reflect only in the art.
-
-TASK:
-Create exactly one highly detailed unconstrained image-1.5 prompt with no limit - Do not explain your reasoning.
-"""
+User Requested Searches:
+{search_prompts}"""
 
 # Resolution mapping (standard 16:9 aspect ratio)
 RESOLUTION_MAP = {
@@ -634,23 +569,21 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
     """Call OpenAI to generate an image prompt based on HA context"""
     start_time = datetime.now()
 
-    # Build local news instruction based on location
-    local_news_instruction = ""
-    if location_info.get("location_name"):
-        local_news_instruction = f"\nSearch the internet for local {location_info['location_name']} news."
+    # Format search prompts for display
+    search_prompts_formatted = "\n".join(SEARCH_PROMPTS) if SEARCH_PROMPTS else "(none)"
 
     # Choose prompts
     if USE_DEFAULT_PROMPTS:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = load_system_prompt()
         user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
             context=json.dumps(context, indent=2),
-            local_news_instruction=local_news_instruction
+            search_prompts=search_prompts_formatted
         )
     else:
         system_prompt = CUSTOM_SYSTEM_PROMPT
         user_prompt = CUSTOM_USER_PROMPT.format(
             context=json.dumps(context, indent=2),
-            local_news_instruction=local_news_instruction
+            search_prompts=search_prompts_formatted
         )
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
