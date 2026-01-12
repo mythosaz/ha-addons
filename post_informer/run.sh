@@ -14,7 +14,9 @@ export ENTITY_IDS="$(bashio::config 'entity_ids')"
 export USE_DEFAULT_PROMPTS="$(bashio::config 'use_default_prompts')"
 export CUSTOM_SYSTEM_PROMPT="$(bashio::config 'custom_system_prompt')"
 export CUSTOM_USER_PROMPT="$(bashio::config 'custom_user_prompt')"
-export SEARCH_PROMPTS="$(bashio::config 'search_prompts' | jq -c '.')"
+# Handle search_prompts - default to empty array if not set
+SEARCH_PROMPTS_RAW="$(bashio::config 'search_prompts' || echo '[]')"
+export SEARCH_PROMPTS="$(echo "${SEARCH_PROMPTS_RAW}" | jq -c '.')"
 
 # Image Configuration
 export IMAGE_QUALITY="$(bashio::config 'image_quality')"

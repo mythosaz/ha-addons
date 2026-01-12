@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-9"
-BUILD_TIMESTAMP = "2026-01-10 17:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-10"
+BUILD_TIMESTAMP = "2026-01-12 05:40:27 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -261,8 +261,43 @@ def build_jinja2_context(all_states: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Check if entity is in specific state"""
         return states_func(entity_id) == state
 
+    # Create a States object that supports both function call and attribute access
+    class States:
+        """Mimics Home Assistant's states object - supports both states('entity_id') and states.domain.entity"""
+        def __init__(self, states_dict):
+            self._states_dict = states_dict
+
+        def __call__(self, entity_id: str) -> str:
+            """Allow states('entity_id') calls"""
+            return states_func(entity_id)
+
+        def __getattr__(self, domain: str):
+            """Allow states.domain.entity access"""
+            class DomainProxy:
+                def __init__(self, domain, states_dict):
+                    self.domain = domain
+                    self._states_dict = states_dict
+
+                def __getattr__(self, entity_name: str):
+                    """Return a state object for domain.entity_name"""
+                    entity_id = f"{self.domain}.{entity_name}"
+                    state_obj = self._states_dict.get(entity_id)
+                    if state_obj:
+                        # Return an object that behaves like HA's state object
+                        class StateObject:
+                            def __init__(self, state_data):
+                                self.entity_id = state_data.get("entity_id")
+                                self.state = state_data.get("state", "unknown")
+                                self.attributes = state_data.get("attributes", {})
+                                self.last_changed = state_data.get("last_changed")
+
+                        return StateObject(state_obj)
+                    return None
+
+            return DomainProxy(domain, self._states_dict)
+
     return {
-        "states": states_func,
+        "states": States(states_dict),
         "state_attr": state_attr_func,
         "is_state": is_state_func,
     }
@@ -274,7 +309,7 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
     Note: This parser uses depth tracking to separate templates from plain entity IDs.
     Edge case: Literal {{ or {% inside Jinja2 strings will confuse the depth counter.
     Example: {{ "Price is {{ value }}" }} will be flagged as incomplete.
-    Workaround: Escape braces in strings: {{ "Price is \{\{ value \}\}" }}
+    Workaround: Escape braces in strings: {{ "Price is \\{\\{ value \\}\\}" }}
     This edge case is rare enough that the warning message will catch it.
     """
     result = {}
