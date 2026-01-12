@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-10"
-BUILD_TIMESTAMP = "2026-01-12 05:40:27 UTC"
+BUILD_VERSION = "1.0.6-pre-13"
+BUILD_TIMESTAMP = "2026-01-12 08:17:07 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
