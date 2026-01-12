@@ -59,7 +59,7 @@ schema:
   use_default_prompts: bool
   custom_system_prompt: str
   custom_user_prompt: str
-  search_prompts: list(str?)
+  search_prompts: [str]
 
   # Image Configuration
   image_quality: list(low|medium|high|auto)
