@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-13"
-BUILD_TIMESTAMP = "2026-01-12 08:17:07 UTC"
+BUILD_VERSION = "1.0.6-pre-14"
+BUILD_TIMESTAMP = "2026-01-13 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -482,6 +482,34 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
         log(f"Processing {len(templates)} Jinja2 templates...")
         jinja_context = build_jinja2_context(all_states)
         env = Environment()
+
+        # Register HA-specific tests
+        def is_state_test(entity_id, state):
+            """Test if an entity is in a specific state"""
+            return jinja_context['is_state'](entity_id, state)
+
+        env.tests['is_state'] = is_state_test
+
+        # Register HA-specific filters
+        env.filters['state_attr'] = jinja_context['state_attr']
+
+        # Enhanced int/float filters with default values (HA compatibility)
+        def int_filter(value, default=0):
+            """Convert to int with optional default"""
+            try:
+                return int(float(value))
+            except (ValueError, TypeError):
+                return default
+
+        def float_filter(value, default=0.0):
+            """Convert to float with optional default"""
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+
+        env.filters['int'] = int_filter
+        env.filters['float'] = float_filter
 
         for template_str in templates:
             try:
