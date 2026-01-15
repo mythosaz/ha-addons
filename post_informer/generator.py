@@ -640,7 +640,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
     transformed_context = {}
     template_counter = 0
 
-    for key, value in context.items():
+    for key, value in (context or {}).items():
         if isinstance(value, dict) and "rendered_value" in value:
             # This is a rendered template - use clean key and extract rendered value
             template_counter += 1
@@ -670,7 +670,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         )
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
-    log(f"Context size: {len(json.dumps(context))} chars")
+    log(f"Context size: {len(json.dumps(transformed_context))} chars")
     if location_info.get("location_name"):
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
