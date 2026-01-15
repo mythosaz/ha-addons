@@ -105,10 +105,12 @@ def load_system_prompt() -> str:
         log(f"Error loading system_prompt.txt: {e}")
         return ""
 
-DEFAULT_USER_PROMPT_TEMPLATE = """Home Assistant Data:
+DEFAULT_USER_PROMPT_TEMPLATE = """
+USER DATA:
+Home Assistant Data:
 {context}
 
-User Requested Searches:
+USER REQUESTED SEARCHES:
 {search_prompts}"""
 
 # Resolution mapping (standard 16:9 aspect ratio)
