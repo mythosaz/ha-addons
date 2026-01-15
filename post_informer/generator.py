@@ -59,6 +59,8 @@ CUSTOM_USER_PROMPT = os.environ.get("CUSTOM_USER_PROMPT", "")
 _search_prompts_raw = os.environ.get("SEARCH_PROMPTS", "[]")
 try:
     SEARCH_PROMPTS = json.loads(_search_prompts_raw)
+    if not isinstance(SEARCH_PROMPTS, list):
+        SEARCH_PROMPTS = []
 except (json.JSONDecodeError, TypeError):
     SEARCH_PROMPTS = []
 
@@ -111,9 +113,7 @@ Home Assistant Data:
 {context}
 
 USER REQUESTED SEARCHES:
-{search_prompts}
-
-{search_instruction}"""
+{search_prompts}"""
 
 # Resolution mapping (standard 16:9 aspect ratio)
 RESOLUTION_MAP = {
@@ -643,12 +643,6 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
     # Format search prompts for display
     search_prompts_formatted = "\n".join(SEARCH_PROMPTS) if SEARCH_PROMPTS else "(none)"
 
-    # Add explicit instruction to use web_search tool when search prompts are provided
-    if SEARCH_PROMPTS:
-        search_instruction = "\n⚠️ IMPORTANT: You MUST use the web_search tool to search for EACH topic listed above in 'USER REQUESTED SEARCHES'. Execute all searches before generating your response."
-    else:
-        search_instruction = ""
-
     # Transform context to extract rendered values from templates
     # This ensures we send clean rendered text to the AI, not the template strings
     transformed_context = {}
@@ -674,19 +668,21 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         system_prompt = load_system_prompt()
         user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
             context=json.dumps(transformed_context, indent=2),
-            search_prompts=search_prompts_formatted,
-            search_instruction=search_instruction
+            search_prompts=search_prompts_formatted
         )
     else:
         system_prompt = CUSTOM_SYSTEM_PROMPT
         user_prompt = CUSTOM_USER_PROMPT.format(
             context=json.dumps(transformed_context, indent=2),
-            search_prompts=search_prompts_formatted,
-            search_instruction=search_instruction
+            search_prompts=search_prompts_formatted
         )
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
     log(f"Context size: {len(json.dumps(transformed_context))} chars")
+    log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
+    if SEARCH_PROMPTS:
+        for i, sp in enumerate(SEARCH_PROMPTS, 1):
+            log(f"  [{i}] {sp}")
     if location_info.get("location_name"):
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
@@ -1292,10 +1288,16 @@ def main():
     log(f"Output: {OUTPUT_DIR}/{FILENAME_PREFIX}_*")
     log(f"Resize: {RESIZE_OUTPUT} ({TARGET_RESOLUTION})")
     log(f"Video: {ENABLE_VIDEO} ({VIDEO_DURATION}s @ {VIDEO_FRAMERATE}fps)")
+
+    # Debug search prompts configuration
     log(f"Search Prompts: {len(SEARCH_PROMPTS)} configured")
     if SEARCH_PROMPTS:
         for i, prompt in enumerate(SEARCH_PROMPTS, 1):
             log(f"  [{i}] {prompt}")
+    else:
+        # Show raw env var to help debug why it's empty
+        raw_value = os.environ.get("SEARCH_PROMPTS", "<not set>")
+        log(f"  (SEARCH_PROMPTS env var: {raw_value[:100]})")  # Show first 100 chars
 
     if not API_KEY:
         log("ERROR: No OpenAI API key configured!")
