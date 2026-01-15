@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-19"
-BUILD_TIMESTAMP = "2026-01-13 00:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-21"
+BUILD_TIMESTAMP = "2026-01-15 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -59,6 +59,8 @@ CUSTOM_USER_PROMPT = os.environ.get("CUSTOM_USER_PROMPT", "")
 _search_prompts_raw = os.environ.get("SEARCH_PROMPTS", "[]")
 try:
     SEARCH_PROMPTS = json.loads(_search_prompts_raw)
+    if not isinstance(SEARCH_PROMPTS, list):
+        SEARCH_PROMPTS = []
 except (json.JSONDecodeError, TypeError):
     SEARCH_PROMPTS = []
 
@@ -518,9 +520,9 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
                 template = env.from_string(template_str)
                 rendered = template.render(jinja_context)
                 result[template_str] = {"rendered_value": rendered}
-                log(f"Rendered: {template_str[:50]}... -> {rendered}")
+                # Detailed rendering shown in ENTITY EXPOSURE section
             except Exception as e:
-                log(f"Error rendering template '{template_str[:50]}...': {e}")
+                log(f"❌ Error rendering template '{template_str[:50]}...': {e}")
                 result[template_str] = {"error": str(e)}
     elif templates and not JINJA2_AVAILABLE:
         log("Warning: Jinja2 templates found but jinja2 library not available")
@@ -630,8 +632,12 @@ def run_startup_entity_scan():
 # PIPELINE STEPS
 # ============================================================================
 
-def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[str, str]) -> Optional[str]:
-    """Call OpenAI to generate an image prompt based on HA context"""
+def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[str, str]) -> tuple[Optional[str], Dict[str, Any]]:
+    """Call OpenAI to generate an image prompt based on HA context
+
+    Returns:
+        tuple: (prompt_text, metadata_dict) where metadata includes tokens and search_count
+    """
     start_time = datetime.now()
 
     # Format search prompts for display
@@ -673,6 +679,10 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
     log(f"Context size: {len(json.dumps(transformed_context))} chars")
+    log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
+    if SEARCH_PROMPTS:
+        for i, sp in enumerate(SEARCH_PROMPTS, 1):
+            log(f"  [{i}] {sp}")
     if location_info.get("location_name"):
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
@@ -752,6 +762,31 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
                     tokens_used["total"] = usage.total_tokens
                 log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
 
+            # Log web search activity
+            search_count = 0
+            if hasattr(response, 'output') and response.output is not None:
+                for item in response.output:
+                    if hasattr(item, 'content') and item.content:
+                        for content_item in item.content:
+                            if hasattr(content_item, 'type') and content_item.type == "tool_use":
+                                if hasattr(content_item, 'name') and content_item.name == "web_search":
+                                    search_count += 1
+                                    # Extract search query if available
+                                    if hasattr(content_item, 'input') and isinstance(content_item.input, dict):
+                                        query = content_item.input.get('query', 'unknown')
+                                        log(f"🔍 Web Search #{search_count}: {query}")
+                            elif hasattr(content_item, 'type') and content_item.type == "tool_result":
+                                # Log search results summary
+                                if hasattr(content_item, 'content'):
+                                    result_text = str(content_item.content)
+                                    result_preview = result_text[:150] + "..." if len(result_text) > 150 else result_text
+                                    log(f"   ↳ Result: {result_preview}")
+
+            if search_count > 0:
+                log(f"✓ Total web searches performed: {search_count}")
+            else:
+                log("ℹ️  No web searches were triggered by the model")
+
             if not prompt:
                 raise Exception("No output_text found in Responses API response")
 
@@ -771,6 +806,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
             )
 
             prompt = response.choices[0].message.content.strip()
+            search_count = 0  # No searches in fallback mode
 
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Generated prompt ({len(prompt)} chars)", timing=elapsed)
@@ -780,12 +816,17 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         log(prompt)
         log("=" * 60)
 
-        return prompt
+        metadata = {
+            "tokens": tokens_used,
+            "search_count": search_count,
+            "generation_time": elapsed
+        }
+        return prompt, metadata
 
     except Exception as e:
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Error generating prompt: {e}", timing=elapsed)
-        return None
+        return None, {}
 
 
 def generate_image(prompt: str, filename: str) -> Optional[Dict[str, Any]]:
@@ -1036,7 +1077,7 @@ def run_pipeline() -> Dict[str, Any]:
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Get all HA states and discover location
-    log(f"Raw ENTITY_IDS config: {repr(ENTITY_IDS)}")
+    # Note: Raw ENTITY_IDS config is shown in ENTITY EXPOSURE section below
 
     all_states = []
     location_info = {"timezone": "America/Phoenix", "location_name": None}
@@ -1074,7 +1115,7 @@ def run_pipeline() -> Dict[str, Any]:
     log_entity_exposure(context)
 
     # Step 3: Generate art prompt
-    art_prompt = generate_prompt_from_context(context, location_info)
+    art_prompt, prompt_metadata = generate_prompt_from_context(context, location_info)
     if not art_prompt:
         result["error"] = "Failed to generate art prompt"
         log("PIPELINE FAILED: No art prompt generated")
@@ -1082,7 +1123,10 @@ def run_pipeline() -> Dict[str, Any]:
 
     result["steps"]["generate_prompt"] = {
         "prompt_length": len(art_prompt),
-        "prompt": art_prompt  # Store full prompt, not preview
+        "prompt": art_prompt,  # Store full prompt, not preview
+        "tokens": prompt_metadata.get("tokens", {}),
+        "search_count": prompt_metadata.get("search_count", 0),
+        "generation_time": prompt_metadata.get("generation_time", 0)
     }
 
     # Step 4: Generate image (temporary file)
@@ -1200,6 +1244,31 @@ def run_pipeline() -> Dict[str, Any]:
     log(f"PIPELINE COMPLETE", timing=pipeline_elapsed)
     log("=" * 60)
 
+    # Show summary of key metrics
+    if "generate_prompt" in result["steps"]:
+        prompt_step = result["steps"]["generate_prompt"]
+        tokens = prompt_step.get("tokens", {})
+        search_count = prompt_step.get("search_count", 0)
+
+        if tokens:
+            log(f"📊 Prompt Generation - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
+        if search_count > 0:
+            log(f"🔍 Web Searches: {search_count} performed")
+
+    if "generate_image" in result["steps"]:
+        img_step = result["steps"]["generate_image"]
+        log(f"🖼️  Image: {img_step.get('size', 'unknown')} @ {img_step.get('render_time', 0):.2f}s")
+
+    if "resize_image" in result["steps"]:
+        resize_step = result["steps"]["resize_image"]
+        log(f"📐 Resize: {resize_step.get('resolution', 'unknown')} @ {resize_step.get('resize_time', 0):.2f}s")
+
+    if "create_video" in result["steps"]:
+        video_step = result["steps"]["create_video"]
+        log(f"🎬 Video: {video_step.get('duration', 0)}s @ {video_step.get('encode_time', 0):.2f}s")
+
+    log("=" * 60)
+
     # Fire completion event
     fire_event("post_informer_complete", result)
 
@@ -1219,6 +1288,16 @@ def main():
     log(f"Output: {OUTPUT_DIR}/{FILENAME_PREFIX}_*")
     log(f"Resize: {RESIZE_OUTPUT} ({TARGET_RESOLUTION})")
     log(f"Video: {ENABLE_VIDEO} ({VIDEO_DURATION}s @ {VIDEO_FRAMERATE}fps)")
+
+    # Debug search prompts configuration
+    log(f"Search Prompts: {len(SEARCH_PROMPTS)} configured")
+    if SEARCH_PROMPTS:
+        for i, prompt in enumerate(SEARCH_PROMPTS, 1):
+            log(f"  [{i}] {prompt}")
+    else:
+        # Show raw env var to help debug why it's empty
+        raw_value = os.environ.get("SEARCH_PROMPTS", "<not set>")
+        log(f"  (SEARCH_PROMPTS env var: {raw_value[:100]})")  # Show first 100 chars
 
     if not API_KEY:
         log("ERROR: No OpenAI API key configured!")
