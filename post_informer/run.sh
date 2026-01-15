@@ -14,9 +14,13 @@ export ENTITY_IDS="$(bashio::config 'entity_ids')"
 export USE_DEFAULT_PROMPTS="$(bashio::config 'use_default_prompts')"
 export CUSTOM_SYSTEM_PROMPT="$(bashio::config 'custom_system_prompt')"
 export CUSTOM_USER_PROMPT="$(bashio::config 'custom_user_prompt')"
-# Handle search_prompts - default to empty array if not set
-SEARCH_PROMPTS_RAW="$(bashio::config 'search_prompts' || echo '[]')"
-export SEARCH_PROMPTS="$(echo "${SEARCH_PROMPTS_RAW}" | jq -c '.' 2>/dev/null || echo '[]')"
+# Handle search_prompts - build JSON array from YAML list
+if bashio::config.has_value 'search_prompts'; then
+    # bashio returns list items one per line, convert to JSON array
+    export SEARCH_PROMPTS="$(bashio::config 'search_prompts' | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+else
+    export SEARCH_PROMPTS="[]"
+fi
 
 # Image Configuration
 export IMAGE_QUALITY="$(bashio::config 'image_quality')"
