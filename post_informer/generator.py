@@ -105,7 +105,9 @@ def load_system_prompt() -> str:
         log(f"Error loading system_prompt.txt: {e}")
         return ""
 
-DEFAULT_USER_PROMPT_TEMPLATE = """Home Assistant Data:
+DEFAULT_USER_PROMPT_TEMPLATE = """Create a creative, unique, and exciting images unrelated to the user's banal Home Assistant data -- into which you smuggle their data as diegetic elements, and provide verbatim data in a similarly creative HUD.
+
+Home Assistant Data:
 {context}
 
 User Requested Searches:
