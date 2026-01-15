@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-15"
+BUILD_VERSION = "1.0.6-pre-19"
 BUILD_TIMESTAMP = "2026-01-13 00:00:00 UTC"
 
 # ============================================================================
@@ -642,7 +642,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
     transformed_context = {}
     template_counter = 0
 
-    for key, value in context.items():
+    for key, value in (context or {}).items():
         if isinstance(value, dict) and "rendered_value" in value:
             # This is a rendered template - use clean key and extract rendered value
             template_counter += 1
@@ -672,7 +672,7 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
         )
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
-    log(f"Context size: {len(json.dumps(context))} chars")
+    log(f"Context size: {len(json.dumps(transformed_context))} chars")
     if location_info.get("location_name"):
         log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
 
