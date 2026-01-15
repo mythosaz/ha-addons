@@ -16,8 +16,22 @@ export CUSTOM_SYSTEM_PROMPT="$(bashio::config 'custom_system_prompt')"
 export CUSTOM_USER_PROMPT="$(bashio::config 'custom_user_prompt')"
 # Handle search_prompts - default to empty array if not set or invalid
 SEARCH_PROMPTS_RAW="$(bashio::config 'search_prompts' || echo '[]')"
-# Suppress jq errors and fallback to empty array if parsing fails
-export SEARCH_PROMPTS="$(echo "${SEARCH_PROMPTS_RAW}" | jq -c '.' 2>/dev/null || echo '[]')"
+# Validate and parse search_prompts with better error handling
+if [ -z "${SEARCH_PROMPTS_RAW}" ] || [ "${SEARCH_PROMPTS_RAW}" = "null" ]; then
+    bashio::log.debug "search_prompts is empty or null, using empty array"
+    export SEARCH_PROMPTS="[]"
+else
+    # Try to parse with jq
+    SEARCH_PROMPTS_PARSED="$(echo "${SEARCH_PROMPTS_RAW}" | jq -c '.' 2>&1)"
+    if [ $? -eq 0 ]; then
+        export SEARCH_PROMPTS="${SEARCH_PROMPTS_PARSED}"
+        bashio::log.debug "search_prompts parsed successfully: ${SEARCH_PROMPTS}"
+    else
+        bashio::log.warning "Failed to parse search_prompts, using empty array. Raw value: ${SEARCH_PROMPTS_RAW}"
+        bashio::log.warning "jq error: ${SEARCH_PROMPTS_PARSED}"
+        export SEARCH_PROMPTS="[]"
+    fi
+fi
 
 # Image Configuration
 export IMAGE_QUALITY="$(bashio::config 'image_quality')"
