@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-14"
+BUILD_VERSION = "1.0.6-pre-15"
 BUILD_TIMESTAMP = "2026-01-13 00:00:00 UTC"
 
 # ============================================================================
@@ -635,17 +635,37 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
     # Format search prompts for display
     search_prompts_formatted = "\n".join(SEARCH_PROMPTS) if SEARCH_PROMPTS else "(none)"
 
+    # Transform context to extract rendered values from templates
+    # This ensures we send clean rendered text to the AI, not the template strings
+    transformed_context = {}
+    template_counter = 0
+
+    for key, value in context.items():
+        if isinstance(value, dict) and "rendered_value" in value:
+            # This is a rendered template - use clean key and extract rendered value
+            template_counter += 1
+            clean_key = f"rendered_template_{template_counter}" if template_counter > 1 else "rendered_template"
+            transformed_context[clean_key] = value["rendered_value"]
+        elif isinstance(value, dict) and "error" in value:
+            # Template rendering error - include for debugging
+            template_counter += 1
+            clean_key = f"template_{template_counter}_error"
+            transformed_context[clean_key] = f"[Error: {value['error']}]"
+        else:
+            # Plain entity - keep as-is
+            transformed_context[key] = value
+
     # Choose prompts
     if USE_DEFAULT_PROMPTS:
         system_prompt = load_system_prompt()
         user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
-            context=json.dumps(context, indent=2),
+            context=json.dumps(transformed_context, indent=2),
             search_prompts=search_prompts_formatted
         )
     else:
         system_prompt = CUSTOM_SYSTEM_PROMPT
         user_prompt = CUSTOM_USER_PROMPT.format(
-            context=json.dumps(context, indent=2),
+            context=json.dumps(transformed_context, indent=2),
             search_prompts=search_prompts_formatted
         )
 
