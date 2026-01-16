@@ -1,6 +1,18 @@
 # Post Informer
+AI-powered HUD display generator for Home Assistant - turns your banal HA data into stunning visual displays.
 
-AI-powered HUD display generator for Home Assistant - turns your HA data into stunning visual displays.
+
+## Features
+- ✨ **Web Search Integration** - AI searches current news during generation
+- 🌍 **Location Auto-Discovery** - Detects timezone and location automatically
+- 🔧 **Jinja2 Template Support** - Use templates in entity_ids for dynamic data
+- 📊 **Token Usage Tracking** - Monitor AI token consumption
+- 🎨 **Custom Prompts** - Extend or replace default prompts with template variables
+- ⚡ **No Timeout Limits** - Runs as persistent service
+- 📁 **Archival System** - Saves originals with embedded metadata
+- 🎬 **Video Generation** - Creates looping videos for displays
+
+---
 
 ## Quick Start
 
@@ -24,18 +36,6 @@ data:
 - `/media/post_informer/post_informer.mp4` - Current display video
 - `/media/post_informer/archive/` - Timestamped originals with metadata
 
----
-
-## Features
-
-✨ **Web Search Integration** - AI searches current news during generation
-🌍 **Location Auto-Discovery** - Detects timezone and location automatically
-🔧 **Jinja2 Template Support** - Use templates in entity_ids for dynamic data
-📊 **Token Usage Tracking** - Monitor AI token consumption
-🎨 **Custom Prompts** - Extend or replace default prompts with template variables
-⚡ **No Timeout Limits** - Runs as persistent service
-📁 **Archival System** - Saves originals with embedded metadata
-🎬 **Video Generation** - Creates looping videos for displays
 
 ---
 
@@ -392,23 +392,12 @@ View detailed logs in the add-on log viewer:
 
 ## Troubleshooting
 
-**No API key configured**
-→ Set `openai_api_key` in add-on configuration
-
-**Prompt generation fails**
-→ Check `prompt_model` is valid and API key has access
-
-**Image generation fails**
-→ Verify `image_model` is correct and accessible
-
-**Search prompts show as "(none)"**
-→ Check add-on logs for SEARCH_PROMPTS env var value. Ensure yaml list format is correct.
-
-**Files not appearing**
-→ Verify `output_dir` is accessible. `/media` folder is recommended.
-
-**Entity gathering fails**
-→ Ensure entity IDs exist in Home Assistant
+- **No API key configured** → Set `openai_api_key` in add-on configuration
+- **Prompt generation fails** → Check `prompt_model` is valid and API key has access
+- **Image generation fails** → Verify `image_model` is correct and accessible
+- **Search prompts show as "(none)"** → Check add-on logs for SEARCH_PROMPTS env var value. Ensure yaml list format is correct.
+- **Files not appearing** → Verify `output_dir` is accessible. `/media` folder is recommended.
+- **Entity gathering fails** → Ensure entity IDs exist in Home Assistant
 
 ---
 
