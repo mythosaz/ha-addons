@@ -2,6 +2,54 @@
 
 All notable changes to this add-on will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Custom Prompt Template Variables**: Custom prompts can now reference default prompts and configuration
+  - `{default_system_prompt}` - Extend built-in system prompt
+  - `{default_user_prompt}` - Extend built-in user prompt
+  - `{location_name}` - Auto-discovered location
+  - `{timezone}` - Auto-discovered timezone
+  - `{prompt_model}` - Current prompt model name
+  - `{image_model}` - Current image model name
+- **Web Search Logging**: Comprehensive logging of web search activity
+  - Shows each search query as it's executed
+  - Displays search result previews
+  - Reports total searches performed per generation
+- **Token Usage Tracking**: Full token consumption reporting
+  - Input/output/total tokens logged during generation
+  - Token counts included in pipeline completion summary
+  - Token data included in `post_informer_complete` event
+- **Enhanced Debugging**: Better configuration visibility
+  - Shows SEARCH_PROMPTS env var value at startup
+  - Logs search prompts included in each request
+  - Raw config value shown when prompts aren't loading
+
+### Fixed
+- **SEARCH_PROMPTS Loading**: Fixed bashio config parsing for YAML lists
+  - Was treating list items as raw strings, now properly converts to JSON array
+  - Search prompts now correctly load from add-on configuration
+- **Jinja2 Template Parsing**: Multiple improvements to template handling
+  - Added missing `is_state` test for HA compatibility
+  - Added `int()` and `float()` filters with default values
+  - Fixed template merging to combine adjacent Jinja statements
+  - Proper handling of YAML folded scalars (`>-`) without breaking templates
+  - Better separation of multiple templates and entity IDs
+
+### Changed
+- **Reduced Logging Verbosity**: Cleaner logs for template rendering
+  - Removed duplicate "Raw ENTITY_IDS config" log (shown in ENTITY EXPOSURE instead)
+  - Removed verbose "Rendered: template -> result" logs
+  - Template errors still logged with ❌ prefix
+- **Pipeline Summary**: Enhanced PIPELINE COMPLETE section
+  - Shows token usage (input/output/total)
+  - Shows web search count
+  - Shows detailed timing for each step (image, resize, video)
+- **System Prompt**: Multiple refinements for better image generation
+  - Updated for gpt-image-1.5 model instructions
+  - Clearer role and objective definitions
+  - Better integration of solution examples
+
 ## [1.0.5] - 2026-01-09
 
 ### Added

@@ -1,60 +1,59 @@
-# Post Informer Add-on
+# Post Informer
 
-AI-powered HUD display generator for Home Assistant - gathers context, generates images, creates videos.
+AI-powered HUD display generator for Home Assistant - turns your HA data into stunning visual displays.
 
-## About
+## Quick Start
 
-Post Informer is a complete pipeline that transforms your Home Assistant data into stunning visual displays. It gathers entity states, uses AI to create contextual "vibe-based" prompts, generates high-quality images, and optionally converts them to looping videos for smart displays.
+**Install:**
+- Add repository: `https://github.com/mythosaz/ha-addons`
+- Install "Post Informer" add-on
+- Configure your API key and entity IDs
+- Start the add-on
 
-### The Pipeline
+**Trigger Generation:**
+```yaml
+service: hassio.addon_stdin
+data:
+  addon: ADDON_SLUG_post_informer
+  input:
+    action: "generate"
+```
 
-1. **Gather Context** - Collects state data from your configured HA entities (sensors, calendars, todo lists, etc.)
-2. **Discover Location** - Automatically detects timezone and location from zone.home for local news
-3. **Generate Art Prompt** - Sends context to gpt-5.2 with web search enabled for current news integration
-4. **Render Image** - Uses gpt-image-1.5 to generate a high-resolution image (1536×1024)
-5. **Resize** - Scales the image to your target display resolution (4K, 1080p, 720p, 480p)
-6. **Create Video** - Converts the image to a looping video for continuous display
-7. **Fire Events** - Notifies Home Assistant when each step completes
+**Outputs:**
+- `/media/post_informer/post_informer.png` - Current display image
+- `/media/post_informer/post_informer.mp4` - Current display video
+- `/media/post_informer/archive/` - Timestamped originals with metadata
 
-### Features
+---
 
-- **Web Search Integration**: AI searches current news (national + local) during prompt generation
-- **Location Auto-Discovery**: Automatically detects your timezone and location from Home Assistant
-- **Jinja2 Template Support**: Use templates in entity_ids for dynamic data extraction
-- **No timeout limits**: Runs as persistent service (bypasses shell_command timeouts)
-- **Fully automated pipeline**: One command triggers the entire workflow
-- **Highly configurable**: Customize prompts, models, resolutions, video settings
-- **Comprehensive logging**: Detailed timing metrics for every step
-- **Event-driven**: Fires HA events for image complete, video complete, and pipeline complete
-- **Flexible entity selection**: Monitor any HA entities (weather, calendars, sensors, etc.)
-- **Multiple output formats**: Original high-res + resized images + video
-- **UTF-8 Support**: Properly handles special characters (°, etc.)
+## Features
 
-## Installation
+✨ **Web Search Integration** - AI searches current news during generation
+🌍 **Location Auto-Discovery** - Detects timezone and location automatically
+🔧 **Jinja2 Template Support** - Use templates in entity_ids for dynamic data
+📊 **Token Usage Tracking** - Monitor AI token consumption
+🎨 **Custom Prompts** - Extend or replace default prompts with template variables
+⚡ **No Timeout Limits** - Runs as persistent service
+📁 **Archival System** - Saves originals with embedded metadata
+🎬 **Video Generation** - Creates looping videos for displays
 
-1. Add this repository to your Home Assistant:
-   - Settings → Add-ons → Add-on Store → ⋮ → Repositories
-   - Add: `https://github.com/mythosaz/ha-addons`
-
-2. Install the "Post Informer" add-on
-
-3. Configure the add-on (see Configuration section below)
-
-4. Start the add-on
+---
 
 ## Configuration
 
-### Minimal Configuration
+### Minimal Setup
 
 ```yaml
 openai_api_key: "sk-your-api-key-here"
 entity_ids: |
   sensor.weather_temperature
   calendar.family
-  todo.shopping_list
 ```
 
-### Full Configuration Example
+### Full Configuration
+
+<details>
+<summary>Click to expand full configuration options</summary>
 
 ```yaml
 # API Configuration
@@ -65,18 +64,16 @@ image_model: "gpt-image-1.5"
 # Entity Monitoring
 entity_ids: |
   sensor.weather_temperature
-  sensor.weather_condition
   calendar.family
-  calendar.work
-  todo.shopping_list
-  sensor.living_room_temperature
-  light.kitchen
-  binary_sensor.front_door
+  {{ states('lock.front_door') }}
 
 # Prompt Customization
 use_default_prompts: true
 custom_system_prompt: ""
 custom_user_prompt: ""
+search_prompts:
+  - national news of major importance
+  - local weather alerts
 
 # Image Configuration
 image_quality: "high"
@@ -84,160 +81,144 @@ image_size: "1536x1024"
 
 # Resize Configuration
 resize_output: true
-target_resolution: "1080p"  # Options: 4k, 1080p, 720p, 480p, or custom like "1920x1080"
+target_resolution: "1080p"
 save_original: true
 
 # Video Configuration
 enable_video: true
-video_duration: 1800  # 30 minutes (in seconds)
-video_framerate: "0.25"  # 1 frame every 4 seconds
+video_duration: 1800
+video_framerate: "0.25"
 use_default_ffmpeg: true
-custom_ffmpeg_args: ""
 
 # Output
 output_dir: "/media/post_informer"
 filename_prefix: "post_informer"
 ```
+</details>
 
-### Configuration Options
+---
 
-#### API Configuration
+## Configuration Reference
 
-- **openai_api_key** (required): Your OpenAI API key
-- **prompt_model** (default: `gpt-5.2`): Model for generating art prompts with web search
-- **image_model** (default: `gpt-image-1.5`): Model for rendering images
+### API Settings
 
-#### Entity Monitoring
+| Option | Default | Description |
+|--------|---------|-------------|
+| `openai_api_key` | *required* | Your OpenAI API key |
+| `prompt_model` | `gpt-5.2` | Model for generating art prompts |
+| `image_model` | `gpt-image-1.5` | Model for rendering images |
 
-- **entity_ids**: List of HA entity IDs or Jinja2 templates to monitor
-  - Supports multiple formats:
-    - **Plain entity IDs**: `sensor.temperature`, `calendar.events`, `todo.tasks`
-    - **Jinja2 templates**: `{{ states('lock.front_door') }}`, `{{ state_attr('sensor.weather', 'temperature') }}`
-    - **Newline-separated** (recommended): Use `|` or `|-` for literal newlines
-    - **Space-separated**: Use `>-` (YAML folded scalar)
-    - **Comma-separated**: `sensor.a, sensor.b, sensor.c`
-  - Mix and match plain IDs and templates as needed
-  - Leave blank to skip entity gathering (you can still trigger with custom prompts)
+### Entity Monitoring
 
-**Format Examples:**
+**entity_ids** - Entities or templates to monitor
+
+Supports multiple formats:
+
 ```yaml
-# Plain entity IDs (recommended for full entity data)
+# Plain entity IDs (recommended for full data)
 entity_ids: |
   sensor.weather_temperature
   calendar.family
-  todo.shopping_list
-
-# With Jinja2 templates (for specific values)
-entity_ids: |
-  sensor.weather_temperature
   lock.front_door
-  {{ states('lock.front_door') }}
-  Battery: {{ state_attr('lock.front_door', 'battery_level') }}%
 
-# Space-separated (YAML folded scalar)
-entity_ids: >-
-  sensor.weather_temperature
-  calendar.family
-  todo.shopping_list
+# With Jinja2 templates (for formatted values)
+entity_ids: |
+  SUN: {{ state_attr('sun.sun', 'elevation') }}°
+  TEMP: {{ states('sensor.temperature') }}°F
+  LOCK: {{ states('lock.front_door') }}
 
-# Comma-separated
-entity_ids: "sensor.weather_temperature, calendar.family, todo.shopping_list"
+# One giant template (like your example)
+entity_ids: >
+  {%- set temp = states('sensor.weather') -%}
+  WEATHER: {{temp}}°F
 ```
 
-#### Prompt Customization
+### Prompt Customization
 
-- **use_default_prompts** (default: `true`): Use built-in HUD-style prompts
-- **custom_system_prompt**: Your custom system prompt (when `use_default_prompts: false`)
-- **custom_user_prompt**: Your custom user prompt template (when `use_default_prompts: false`)
-- **search_prompts**: List of search queries for web search (e.g., news topics)
+| Option | Default | Description |
+|--------|---------|-------------|
+| `use_default_prompts` | `true` | Use built-in HUD-style prompts |
+| `custom_system_prompt` | `""` | Override system prompt |
+| `custom_user_prompt` | `""` | Override user prompt |
+| `search_prompts` | `[]` | List of web search queries |
 
-**Available Template Variables for Custom Prompts:**
+**Template Variables for Custom Prompts:**
 
-When creating custom prompts, you can use these placeholders:
+When creating custom prompts, use these placeholders:
 
-- `{context}` - JSON object with entity states and rendered template values
-- `{search_prompts}` - Newline-separated list of search queries (or "(none)")
-- `{default_system_prompt}` - The built-in system prompt (for extending/modifying)
-- `{default_user_prompt}` - The built-in user prompt (for extending/modifying)
-- `{location_name}` - Auto-discovered location (e.g., "Home")
-- `{timezone}` - Auto-discovered timezone (e.g., "America/Phoenix")
-- `{prompt_model}` - The model used for prompt generation (e.g., "gpt-5.2")
-- `{image_model}` - The model used for image generation (e.g., "gpt-image-1.5")
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{context}` | JSON entity data | `{"rendered_template": "SUN: 45°..."}` |
+| `{search_prompts}` | Search queries | `national news\nlocal news` |
+| `{default_system_prompt}` | Built-in system prompt | Use to extend default |
+| `{default_user_prompt}` | Built-in user prompt | Use to extend default |
+| `{location_name}` | Auto-discovered location | `Home` |
+| `{timezone}` | Auto-discovered timezone | `America/Phoenix` |
+| `{prompt_model}` | Prompt model name | `gpt-5.2` |
+| `{image_model}` | Image model name | `gpt-image-1.5` |
 
-**Custom Prompt Examples:**
-
+**Example: Extend Default Prompt**
 ```yaml
-# Extend the default user prompt with additional instructions
 use_default_prompts: false
 custom_user_prompt: |
   {default_user_prompt}
 
-  Additional requirement: Only include images set in outer space with a cosmic theme.
+  Additional requirement: Use only space themes.
+```
 
-# Create a completely custom prompt
+**Example: Custom Prompt with Variables**
+```yaml
 use_default_prompts: false
-custom_system_prompt: "You are an AI that creates minimalist art."
+custom_system_prompt: "You create minimalist art."
 custom_user_prompt: |
-  Create a minimalist artwork based on this data:
+  Create art for {location_name} ({timezone}):
   {context}
 
-  Location: {location_name} ({timezone})
-
-  Search these topics and incorporate findings:
+  Search these topics:
   {search_prompts}
-
-# Modify only the system prompt, keep default user prompt
-use_default_prompts: false
-custom_system_prompt: |
-  {default_system_prompt}
-
-  Important: Always use warm color palettes and Art Deco style.
-custom_user_prompt: "{default_user_prompt}"
 ```
 
-#### Image Configuration
+### Image Settings
 
-- **image_quality** (default: `high`): OpenAI image quality (`low`, `medium`, `high`, `auto`)
-- **image_size** (default: `1536x1024`): Image dimensions
+| Option | Default | Description |
+|--------|---------|-------------|
+| `image_quality` | `high` | OpenAI quality: `low`, `medium`, `high`, `auto` |
+| `image_size` | `1536x1024` | Image dimensions |
 
-#### Resize Configuration
+### Resize Settings
 
-- **resize_output** (default: `true`): Enable image resizing
-- **target_resolution** (default: `1080p`): Target resolution
-  - Presets: `4k` (3840×2560), `1080p` (1920×1280), `720p` (1280×854), `480p` (640×427)
-  - Custom: `1920x1080` format
-- **save_original** (default: `true`): Keep original high-res image
+| Option | Default | Description |
+|--------|---------|-------------|
+| `resize_output` | `true` | Enable image resizing |
+| `target_resolution` | `1080p` | `4k`, `1080p`, `720p`, `480p`, or `WIDTHxHEIGHT` |
+| `save_original` | `true` | Archive original with metadata |
 
-#### Video Configuration
+### Video Settings
 
-- **enable_video** (default: `true`): Create video from image
-- **video_duration** (default: `1800`): Video length in seconds
-- **video_framerate** (default: `0.25`): Framerate (fractional supported)
-- **use_default_ffmpeg** (default: `true`): Use built-in ffmpeg settings
-- **custom_ffmpeg_args**: Custom ffmpeg arguments (advanced users)
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enable_video` | `true` | Create video from image |
+| `video_duration` | `1800` | Video length in seconds |
+| `video_framerate` | `0.25` | Framerate (fractional OK) |
+| `use_default_ffmpeg` | `true` | Use built-in ffmpeg settings |
+| `custom_ffmpeg_args` | `""` | Custom ffmpeg args (advanced) |
 
-#### Output
+### Output Settings
 
-- **output_dir** (default: `/media/post_informer`): Where to save files
-- **filename_prefix** (default: `post_informer`): Prefix for generated filenames
+| Option | Default | Description |
+|--------|---------|-------------|
+| `output_dir` | `/media/post_informer` | Where to save files |
+| `filename_prefix` | `post_informer` | Prefix for filenames |
 
-## Usage
+---
 
-### Triggering via Automation
+## Usage Examples
 
-```yaml
-service: hassio.addon_stdin
-data:
-  addon: ADDON_SLUG_post_informer
-  input:
-    action: "generate"
-```
-
-### Scheduled Generation
+### Schedule Daily Generation
 
 ```yaml
 automation:
-  - alias: "Generate Morning HUD Display"
+  - alias: "Morning HUD Display"
     trigger:
       - platform: time
         at: "06:00:00"
@@ -249,227 +230,11 @@ automation:
             action: "generate"
 ```
 
-### Listening for Completion Events
-
-The add-on fires three types of events:
-
-#### 1. Image Complete Event
+### Update on Events
 
 ```yaml
 automation:
-  - alias: "HUD Image Ready"
-    trigger:
-      - platform: event
-        event_type: post_informer_image_complete
-    condition:
-      - condition: template
-        value_template: "{{ trigger.event.data.success }}"
-    action:
-      - service: notify.mobile_app
-        data:
-          message: "HUD image generated!"
-```
-
-Event data:
-```json
-{
-  "success": true,
-  "image": "/media/post_informer/post_informer.png",
-  "archive": "/media/post_informer/archive/post_informer_202601050600.png",
-  "resolution": "1080p",
-  "timestamp": "2026-01-05T06:00:00"
-}
-```
-
-#### 2. Video Complete Event
-
-```yaml
-automation:
-  - alias: "Play HUD Video on Living Room TV"
-    trigger:
-      - platform: event
-        event_type: post_informer_video_complete
-    condition:
-      - condition: template
-        value_template: "{{ trigger.event.data.success }}"
-    action:
-      - service: media_player.play_media
-        target:
-          entity_id: media_player.living_room_tv
-        data:
-          media_content_id: "{{ trigger.event.data.video }}"
-          media_content_type: "video/mp4"
-```
-
-Event data:
-```json
-{
-  "success": true,
-  "video": "/media/post_informer/post_informer.mp4",
-  "duration": 1800,
-  "timestamp": "2026-01-05T06:00:00"
-}
-```
-
-#### 3. Pipeline Complete Event
-
-```yaml
-automation:
-  - alias: "Log Pipeline Completion"
-    trigger:
-      - platform: event
-        event_type: post_informer_complete
-    action:
-      - service: logbook.log
-        data:
-          name: "Post Informer"
-          message: "Pipeline completed in {{ trigger.event.data.total_time }}s"
-```
-
-Event data includes full pipeline details:
-```json
-{
-  "success": true,
-  "timestamp": "2026-01-05T06:00:00",
-  "image": "/media/post_informer/post_informer.png",
-  "archive": "/media/post_informer/archive/post_informer_202601050600.png",
-  "video": "/media/post_informer/post_informer.mp4",
-  "total_time": 67.42,
-  "steps": {
-    "gather_entities": {...},
-    "generate_prompt": {...},
-    "generate_image": {...},
-    "resize_image": {...},
-    "create_video": {...}
-  }
-}
-```
-
-## File Outputs
-
-Each pipeline run generates or overwrites working files, with optional archiving:
-
-```
-/media/post_informer/
-  post_informer.png                        # Working image (resized, always overwritten)
-  post_informer.mp4                        # Working video (if enabled, always overwritten)
-
-  archive/                                 # Archive directory (only if save_original enabled)
-    post_informer_202601050600.png         # Original high-res with embedded metadata
-    post_informer_202601051200.png         # Next generation...
-    ...
-```
-
-**Working files**: The `post_informer.png` and `post_informer.mp4` files are always overwritten with the latest generation, making them easy to reference in automations and displays.
-
-**Archive**: When `save_original` is enabled, the original high-resolution image is saved to the `archive/` subdirectory with a timestamp and embedded metadata (prompt, model, etc.). This preserves a complete history of generations. The metadata is embedded using ImageMagick and can be viewed with tools like `exiftool` or `identify -verbose`.
-
-## Default Prompts
-
-The add-on includes sophisticated default prompts that:
-- Synthesize a "vibe" from your HA data
-- Create futuristic HUD-style displays
-- Incorporate contextual information (weather, calendar, tasks)
-- Search for news headlines (national + local Phoenix)
-- Use creative visual styles (vaporwave, cyberpunk, Art Deco, etc.)
-- Optimize for QLED display dynamic range
-
-You can use the defaults or provide your own custom prompts.
-
-## Logs
-
-View comprehensive logging in the add-on logs:
-
-```
-[post_informer] [2026-01-05 06:00:00] Add-on started, waiting for input...
-[post_informer] [2026-01-05 06:00:00] Config: gpt-4o → gpt-image-1.5
-[post_informer] [2026-01-05 06:00:05] ============================================================
-[post_informer] [2026-01-05 06:00:05] STARTING PIPELINE
-[post_informer] [2026-01-05 06:00:05] ============================================================
-[post_informer] [2026-01-05 06:00:05] Gathering 8 entity states...
-[post_informer] [2026-01-05 06:00:06] Gathered 8 entities (0.82s)
-[post_informer] [2026-01-05 06:00:06] Generating art prompt with gpt-4o...
-[post_informer] [2026-01-05 06:00:06] Context size: 3421 chars
-[post_informer] [2026-01-05 06:00:15] Generated prompt (2847 chars) (8.94s)
-[post_informer] [2026-01-05 06:00:15] Prompt preview: Create a kinetic vaporwave cityscape...
-[post_informer] [2026-01-05 06:00:15] Rendering image with gpt-image-1.5...
-[post_informer] [2026-01-05 06:00:15] Quality: high, Size: 1536x1024
-[post_informer] [2026-01-05 06:00:58] Image rendered: /media/post_informer/post_informer_temp.png (42.31s)
-[post_informer] [2026-01-05 06:00:58] Archiving original to /media/post_informer/archive/post_informer_202601050600.png
-[post_informer] [2026-01-05 06:00:58] Embedded metadata into /media/post_informer/archive/post_informer_202601050600.png
-[post_informer] [2026-01-05 06:00:58] Resizing to 1920x1080...
-[post_informer] [2026-01-05 06:00:59] Image resized: /media/post_informer/post_informer.png (1.12s)
-[post_informer] [2026-01-05 06:00:59] Generated working image: /media/post_informer/post_informer.png
-[post_informer] [2026-01-05 06:00:59] Fired event post_informer_image_complete: HTTP 200
-[post_informer] [2026-01-05 06:00:59] Creating video (1800s @ 0.25 fps)...
-[post_informer] [2026-01-05 06:01:12] Video created: /media/post_informer/post_informer.mp4 (13.21s)
-[post_informer] [2026-01-05 06:01:12] Generated video: /media/post_informer/post_informer.mp4
-[post_informer] [2026-01-05 06:01:12] Fired event post_informer_video_complete: HTTP 200
-[post_informer] [2026-01-05 06:01:12] ============================================================
-[post_informer] [2026-01-05 06:01:12] PIPELINE COMPLETE (67.42s)
-[post_informer] [2026-01-05 06:01:12] ============================================================
-[post_informer] [2026-01-05 06:01:12] SUCCESS: Generated /media/post_informer/post_informer.png
-[post_informer] [2026-01-05 06:01:12] SUCCESS: Archived to /media/post_informer/archive/post_informer_202601050600.png
-[post_informer] [2026-01-05 06:01:12] SUCCESS: Generated /media/post_informer/post_informer.mp4
-```
-
-## Example Use Cases
-
-### Morning Smart Mirror Display
-
-Generate a fresh HUD display every morning with weather, calendar, and tasks:
-
-```yaml
-automation:
-  - alias: "Generate Morning Display"
-    trigger:
-      - platform: time
-        at: "06:00:00"
-    action:
-      - service: hassio.addon_stdin
-        data:
-          addon: ADDON_SLUG_post_informer
-          input:
-            action: "generate"
-
-  - alias: "Show on Bedroom Display"
-    trigger:
-      - platform: event
-        event_type: post_informer_video_complete
-    action:
-      - service: media_player.play_media
-        target:
-          entity_id: media_player.bedroom_display
-        data:
-          media_content_id: "{{ trigger.event.data.video }}"
-          media_content_type: "video/mp4"
-```
-
-### Rotating Kitchen Display
-
-Update every 4 hours with fresh context:
-
-```yaml
-automation:
-  - alias: "Update Kitchen Display"
-    trigger:
-      - platform: time_pattern
-        hours: "/4"  # Every 4 hours
-    action:
-      - service: hassio.addon_stdin
-        data:
-          addon: ADDON_SLUG_post_informer
-          input:
-            action: "generate"
-```
-
-### Event-Triggered Updates
-
-Generate new displays when important events occur:
-
-```yaml
-automation:
-  - alias: "Update Display on Calendar Changes"
+  - alias: "Update on Calendar Changes"
     trigger:
       - platform: state
         entity_id: calendar.family
@@ -481,43 +246,183 @@ automation:
             action: "generate"
 ```
 
+### Display When Ready
+
+```yaml
+automation:
+  - alias: "Show on Living Room TV"
+    trigger:
+      - platform: event
+        event_type: post_informer_video_complete
+    condition:
+      - "{{ trigger.event.data.success }}"
+    action:
+      - service: media_player.play_media
+        target:
+          entity_id: media_player.living_room_tv
+        data:
+          media_content_id: "{{ trigger.event.data.video }}"
+          media_content_type: "video/mp4"
+```
+
+---
+
+## Events
+
+The add-on fires three event types for automation:
+
+### post_informer_image_complete
+
+Fires when image generation completes.
+
+```json
+{
+  "success": true,
+  "image": "/media/post_informer/post_informer.png",
+  "archive": "/media/post_informer/archive/post_informer_202601050600.png",
+  "resolution": "1080p",
+  "timestamp": "2026-01-05T06:00:00"
+}
+```
+
+### post_informer_video_complete
+
+Fires when video encoding completes.
+
+```json
+{
+  "success": true,
+  "video": "/media/post_informer/post_informer.mp4",
+  "duration": 1800,
+  "timestamp": "2026-01-05T06:00:00"
+}
+```
+
+### post_informer_complete
+
+Fires when entire pipeline completes.
+
+```json
+{
+  "success": true,
+  "timestamp": "2026-01-05T06:00:00",
+  "image": "/media/post_informer/post_informer.png",
+  "video": "/media/post_informer/post_informer.mp4",
+  "total_time": 67.42,
+  "steps": {
+    "generate_prompt": {
+      "tokens": {"input": 1200, "output": 800, "total": 2000},
+      "search_count": 2,
+      "generation_time": 12.5
+    },
+    "generate_image": {...},
+    "resize_image": {...},
+    "create_video": {...}
+  }
+}
+```
+
+---
+
+## File Outputs
+
+```
+/media/post_informer/
+  post_informer.png      # Working image (resized, always updated)
+  post_informer.mp4      # Working video (always updated)
+
+  archive/               # Timestamped originals (if save_original enabled)
+    post_informer_202601050600.png
+    post_informer_202601051200.png
+    ...
+```
+
+**Working files** (`*.png`, `*.mp4`) are always overwritten - easy to reference in automations.
+
+**Archive files** preserve generation history with embedded metadata (prompt, model, timestamp).
+
+---
+
+## Pipeline
+
+The add-on runs this pipeline on each generation:
+
+1. **Gather Context** - Fetches HA entity states
+2. **Discover Location** - Auto-detects timezone/location from `zone.home`
+3. **Generate Prompt** - Uses gpt-5.2 with web search for news integration
+4. **Render Image** - Uses gpt-image-1.5 to create high-res image
+5. **Archive** - Saves original with metadata (optional)
+6. **Resize** - Scales to target resolution (optional)
+7. **Create Video** - Converts to looping video (optional)
+8. **Fire Events** - Notifies HA of completion
+
+**Typical Timing:**
+- Prompt generation: 5-15s
+- Image rendering: 30-60s
+- Resize: <2s
+- Video encoding: 10-20s
+- **Total: ~60-90s**
+
+---
+
+## Logs
+
+View detailed logs in the add-on log viewer:
+
+```
+[post_informer] [2026-01-05 06:00:05] STARTING PIPELINE
+[post_informer] [2026-01-05 06:00:05] Gathered 8 entities (0.82s)
+[post_informer] [2026-01-05 06:00:06] Search prompts in request: 2
+[post_informer] [2026-01-05 06:00:06]   [1] national news of major importance
+[post_informer] [2026-01-05 06:00:06]   [2] local phoenix news
+[post_informer] [2026-01-05 06:00:08] 🔍 Web Search #1: latest national news 2026
+[post_informer] [2026-01-05 06:00:10] 🔍 Web Search #2: phoenix news today
+[post_informer] [2026-01-05 06:00:15] ✓ Total web searches performed: 2
+[post_informer] [2026-01-05 06:00:15] Generated prompt (2847 chars) (8.94s)
+[post_informer] [2026-01-05 06:00:58] Image rendered (42.31s)
+[post_informer] [2026-01-05 06:01:12] PIPELINE COMPLETE (67.42s)
+[post_informer] [2026-01-05 06:01:12] 📊 Tokens: 1200 in / 800 out / 2000 total
+[post_informer] [2026-01-05 06:01:12] 🔍 Web Searches: 2 performed
+[post_informer] [2026-01-05 06:01:12] 🖼️  Image: 1536x1024 @ 42.31s
+[post_informer] [2026-01-05 06:01:12] 📐 Resize: 1920x1080 @ 1.12s
+[post_informer] [2026-01-05 06:01:12] 🎬 Video: 1800s @ 13.21s
+```
+
+---
+
 ## Troubleshooting
 
-### No API key configured
-Ensure you've set `openai_api_key` in the add-on configuration.
+**No API key configured**
+→ Set `openai_api_key` in add-on configuration
 
-### Pipeline fails at prompt generation
-Check that `prompt_model` (default: `gpt-4o`) is valid and your API key has access.
+**Prompt generation fails**
+→ Check `prompt_model` is valid and API key has access
 
-### Pipeline fails at image generation
-Verify `image_model` (default: `gpt-image-1.5`) is correct and accessible.
+**Image generation fails**
+→ Verify `image_model` is correct and accessible
 
-### Video encoding fails
-Check that `video_framerate` and `video_duration` are valid values.
+**Search prompts show as "(none)"**
+→ Check add-on logs for SEARCH_PROMPTS env var value. Ensure yaml list format is correct.
 
-### Files not appearing
-Verify `output_dir` is accessible. The `/media` folder is recommended as it's shared with HA.
+**Files not appearing**
+→ Verify `output_dir` is accessible. `/media` folder is recommended.
 
-### Entity gathering fails
-Ensure entity IDs are valid and exist in your HA instance.
+**Entity gathering fails**
+→ Ensure entity IDs exist in Home Assistant
 
-## Supported Architectures
+---
 
-- aarch64 (ARM 64-bit)
-- amd64 (x86 64-bit)
+## Advanced Topics
 
-## Performance Notes
+For technical details, development info, and advanced customization, see [DEVELOPERS.md](DEVELOPERS.md).
 
-- **Prompt generation**: ~5-15 seconds (depends on context size and GPT-4o response time)
-- **Image rendering**: ~30-60 seconds (depends on gpt-image-1.5 load)
-- **Resize**: <2 seconds
-- **Video encoding**: ~10-20 seconds (for 30-minute video with ultrafast preset)
-- **Total pipeline**: ~60-90 seconds end-to-end
+---
+
+## Support
+
+- **Issues**: https://github.com/mythosaz/ha-addons/issues
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
 MIT
-
-## Support
-
-Report issues at: https://github.com/mythosaz/ha-addons/issues
