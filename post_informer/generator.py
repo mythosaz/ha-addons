@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-21"
-BUILD_TIMESTAMP = "2026-01-15 00:00:00 UTC"
+BUILD_VERSION = "1.0.6-pre-22"
+BUILD_TIMESTAMP = "2026-01-16 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -663,19 +663,39 @@ def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[st
             # Plain entity - keep as-is
             transformed_context[key] = value
 
+    # Load default prompts (always, so they can be referenced in custom prompts)
+    default_system_prompt = load_system_prompt()
+    default_user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
+        context=json.dumps(transformed_context, indent=2),
+        search_prompts=search_prompts_formatted
+    )
+
+    # Build available variables for custom prompt substitution
+    prompt_variables = {
+        # Core data
+        "context": json.dumps(transformed_context, indent=2),
+        "search_prompts": search_prompts_formatted,
+
+        # Default prompts (for extending/modifying)
+        "default_system_prompt": default_system_prompt,
+        "default_user_prompt": default_user_prompt,
+
+        # Location info
+        "location_name": location_info.get("location_name", "Unknown"),
+        "timezone": location_info.get("timezone", "UTC"),
+
+        # Config info
+        "prompt_model": PROMPT_MODEL,
+        "image_model": IMAGE_MODEL,
+    }
+
     # Choose prompts
     if USE_DEFAULT_PROMPTS:
-        system_prompt = load_system_prompt()
-        user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
-            context=json.dumps(transformed_context, indent=2),
-            search_prompts=search_prompts_formatted
-        )
+        system_prompt = default_system_prompt
+        user_prompt = default_user_prompt
     else:
-        system_prompt = CUSTOM_SYSTEM_PROMPT
-        user_prompt = CUSTOM_USER_PROMPT.format(
-            context=json.dumps(transformed_context, indent=2),
-            search_prompts=search_prompts_formatted
-        )
+        system_prompt = CUSTOM_SYSTEM_PROMPT.format(**prompt_variables) if CUSTOM_SYSTEM_PROMPT else default_system_prompt
+        user_prompt = CUSTOM_USER_PROMPT.format(**prompt_variables) if CUSTOM_USER_PROMPT else default_user_prompt
 
     log(f"Generating art prompt with {PROMPT_MODEL}...")
     log(f"Context size: {len(json.dumps(transformed_context))} chars")

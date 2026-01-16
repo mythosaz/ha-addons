@@ -148,7 +148,52 @@ entity_ids: "sensor.weather_temperature, calendar.family, todo.shopping_list"
 
 - **use_default_prompts** (default: `true`): Use built-in HUD-style prompts
 - **custom_system_prompt**: Your custom system prompt (when `use_default_prompts: false`)
-- **custom_user_prompt**: Your custom user prompt template (use `{context}` placeholder)
+- **custom_user_prompt**: Your custom user prompt template (when `use_default_prompts: false`)
+- **search_prompts**: List of search queries for web search (e.g., news topics)
+
+**Available Template Variables for Custom Prompts:**
+
+When creating custom prompts, you can use these placeholders:
+
+- `{context}` - JSON object with entity states and rendered template values
+- `{search_prompts}` - Newline-separated list of search queries (or "(none)")
+- `{default_system_prompt}` - The built-in system prompt (for extending/modifying)
+- `{default_user_prompt}` - The built-in user prompt (for extending/modifying)
+- `{location_name}` - Auto-discovered location (e.g., "Home")
+- `{timezone}` - Auto-discovered timezone (e.g., "America/Phoenix")
+- `{prompt_model}` - The model used for prompt generation (e.g., "gpt-5.2")
+- `{image_model}` - The model used for image generation (e.g., "gpt-image-1.5")
+
+**Custom Prompt Examples:**
+
+```yaml
+# Extend the default user prompt with additional instructions
+use_default_prompts: false
+custom_user_prompt: |
+  {default_user_prompt}
+
+  Additional requirement: Only include images set in outer space with a cosmic theme.
+
+# Create a completely custom prompt
+use_default_prompts: false
+custom_system_prompt: "You are an AI that creates minimalist art."
+custom_user_prompt: |
+  Create a minimalist artwork based on this data:
+  {context}
+
+  Location: {location_name} ({timezone})
+
+  Search these topics and incorporate findings:
+  {search_prompts}
+
+# Modify only the system prompt, keep default user prompt
+use_default_prompts: false
+custom_system_prompt: |
+  {default_system_prompt}
+
+  Important: Always use warm color palettes and Art Deco style.
+custom_user_prompt: "{default_user_prompt}"
+```
 
 #### Image Configuration
 
