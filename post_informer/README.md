@@ -12,6 +12,12 @@ AI-powered HUD display generator for Home Assistant - turns your banal HA data i
 - 📁 **Archival System** - Saves originals with embedded metadata
 - 🎬 **Video Generation** - Creates looping videos for displays
 
+## How It Works
+
+**Gather** entities from HA → **Process** Jinja templates → **Generate** AI prompt with web search → **Render** image → **Create** video
+
+_(~60-90s total)_
+
 ---
 
 ## Quick Start
@@ -178,14 +184,21 @@ custom_user_prompt: |
   {search_prompts}
 ```
 
-### Image Settings
+### Image, Resize & Video Settings
+
+Defaults are recommended for most use cases.
+
+<details>
+<summary>Click to expand image/video configuration options</summary>
+
+**Image Settings:**
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `image_quality` | `high` | OpenAI quality: `low`, `medium`, `high`, `auto` |
 | `image_size` | `1536x1024` | Image dimensions |
 
-### Resize Settings
+**Resize Settings:**
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -193,7 +206,7 @@ custom_user_prompt: |
 | `target_resolution` | `1080p` | `4k`, `1080p`, `720p`, `480p`, or `WIDTHxHEIGHT` |
 | `save_original` | `true` | Archive original with metadata |
 
-### Video Settings
+**Video Settings:**
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -202,6 +215,8 @@ custom_user_prompt: |
 | `video_framerate` | `0.25` | Framerate (fractional OK) |
 | `use_default_ffmpeg` | `true` | Use built-in ffmpeg settings |
 | `custom_ffmpeg_args` | `""` | Custom ffmpeg args (advanced) |
+
+</details>
 
 ### Output Settings
 
@@ -213,6 +228,9 @@ custom_user_prompt: |
 ---
 
 ## Usage Examples
+
+<details>
+<summary>Click to expand automation examples</summary>
 
 ### Schedule Daily Generation
 
@@ -265,11 +283,16 @@ automation:
           media_content_type: "video/mp4"
 ```
 
+</details>
+
 ---
 
 ## Events
 
-The add-on fires three event types for automation:
+The add-on fires three event types for automation: `post_informer_image_complete`, `post_informer_video_complete`, and `post_informer_complete`.
+
+<details>
+<summary>Click to expand event data structures</summary>
 
 ### post_informer_image_complete
 
@@ -321,6 +344,8 @@ Fires when entire pipeline completes.
   }
 }
 ```
+
+</details>
 
 ---
 
