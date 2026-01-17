@@ -135,6 +135,24 @@ def log(msg: str, timing: Optional[float] = None):
     else:
         print(f"[post_informer] [{timestamp}] {msg}", flush=True)
 
+
+def to_ha_media_path(filesystem_path: str) -> str:
+    """
+    Convert filesystem path to Home Assistant media URL path.
+
+    Home Assistant requires /local to be inserted after /media for local media files.
+    E.g., /media/post_informer/file.mp4 -> /media/local/post_informer/file.mp4
+
+    Args:
+        filesystem_path: The actual filesystem path (e.g., /media/post_informer/file.mp4)
+
+    Returns:
+        The Home Assistant media URL path (e.g., /media/local/post_informer/file.mp4)
+    """
+    if filesystem_path.startswith("/media/"):
+        return filesystem_path.replace("/media/", "/media/local/", 1)
+    return filesystem_path
+
 # ============================================================================
 # HOME ASSISTANT INTEGRATION
 # ============================================================================
@@ -1233,14 +1251,14 @@ def run_pipeline() -> Dict[str, Any]:
 
         if video_result and video_result.get("success"):
             result["steps"]["create_video"] = video_result
-            result["video"] = video_path
+            result["video"] = to_ha_media_path(video_path)
             result["success"] = True
             log(f"Generated video: {video_path}")
 
             # Fire video complete event
             fire_event("post_informer_video_complete", {
                 "success": True,
-                "video": video_path,
+                "video": to_ha_media_path(video_path),
                 "duration": VIDEO_DURATION,
                 "timestamp": result["timestamp"]
             })
