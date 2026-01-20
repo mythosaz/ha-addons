@@ -7,6 +7,10 @@ export OPENAI_API_KEY="$(bashio::config 'openai_api_key')"
 export PROMPT_MODEL="$(bashio::config 'prompt_model')"
 export IMAGE_MODEL="$(bashio::config 'image_model')"
 
+# 3-Step Pipeline Models
+export SCENE_CONCEPT_MODEL="$(bashio::config 'scene_concept_model')"
+export DATA_INTEGRATION_MODEL="$(bashio::config 'data_integration_model')"
+
 # Entity Monitoring
 export ENTITY_IDS="$(bashio::config 'entity_ids')"
 
