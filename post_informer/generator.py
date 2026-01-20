@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.6-pre-22"
-BUILD_TIMESTAMP = "2026-01-16 00:00:00 UTC"
+BUILD_VERSION = "1.0.7-pre-1"
+BUILD_TIMESTAMP = "2026-01-20 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -37,8 +37,12 @@ BUILD_TIMESTAMP = "2026-01-16 00:00:00 UTC"
 
 # API Configuration
 API_KEY = os.environ.get("OPENAI_API_KEY", "")
-PROMPT_MODEL = os.environ.get("PROMPT_MODEL", "gpt-5.2")
+PROMPT_MODEL = os.environ.get("PROMPT_MODEL", "gpt-5.2")  # Legacy - use SCENE_CONCEPT_MODEL instead
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1.5")
+
+# New 3-step pipeline models
+SCENE_CONCEPT_MODEL = os.environ.get("SCENE_CONCEPT_MODEL", "gpt-5.2")
+DATA_INTEGRATION_MODEL = os.environ.get("DATA_INTEGRATION_MODEL", "gpt-4o-mini")
 
 # Entity Monitoring
 # Note: HA may pass this as a JSON-encoded list or a string
@@ -93,7 +97,7 @@ SUPERVISOR_API = "http://supervisor/core/api"
 # ============================================================================
 
 def load_system_prompt() -> str:
-    """Load system prompt from file, fallback to empty if not found"""
+    """Load system prompt from file, fallback to empty if not found (LEGACY)"""
     script_dir = Path(__file__).parent
     system_prompt_path = script_dir / "system_prompt.txt"
 
@@ -105,6 +109,38 @@ def load_system_prompt() -> str:
         return ""
     except Exception as e:
         log(f"Error loading system_prompt.txt: {e}")
+        return ""
+
+
+def load_scene_concept_prompt() -> str:
+    """Load scene concept system prompt for Step 1"""
+    script_dir = Path(__file__).parent
+    prompt_path = script_dir / "scene_concept_system_prompt.txt"
+
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        log(f"Warning: scene_concept_system_prompt.txt not found at {prompt_path}")
+        return ""
+    except Exception as e:
+        log(f"Error loading scene_concept_system_prompt.txt: {e}")
+        return ""
+
+
+def load_data_integration_prompt() -> str:
+    """Load data integration system prompt for Step 2"""
+    script_dir = Path(__file__).parent
+    prompt_path = script_dir / "data_integration_system_prompt.txt"
+
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        log(f"Warning: data_integration_system_prompt.txt not found at {prompt_path}")
+        return ""
+    except Exception as e:
+        log(f"Error loading data_integration_system_prompt.txt: {e}")
         return ""
 
 DEFAULT_USER_PROMPT_TEMPLATE = """
@@ -647,7 +683,214 @@ def run_startup_entity_scan():
 
 
 # ============================================================================
-# PIPELINE STEPS
+# PIPELINE STEPS - 3-STEP AI PIPELINE
+# ============================================================================
+
+def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
+    """Step 1: Generate creative scene concept using Claude 5.2 with reasoning:high
+
+    Returns:
+        tuple: (scene_concept_text, metadata_dict) where metadata includes tokens and generation time
+    """
+    start_time = datetime.now()
+
+    # Load system prompt
+    system_prompt = load_scene_concept_prompt()
+    user_prompt = "Generate one scene.\nCommit to it.\nNo alternatives."
+
+    log(f"Generating scene concept with {SCENE_CONCEPT_MODEL}...")
+
+    try:
+        client = OpenAI(api_key=API_KEY)
+
+        # Use Responses API with reasoning:high
+        log("Calling Responses API with reasoning:high...")
+        response = client.responses.create(
+            model=SCENE_CONCEPT_MODEL,
+            input=[
+                {
+                    "role": "developer",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": system_prompt
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": user_prompt
+                        }
+                    ]
+                }
+            ],
+            text={
+                "format": {"type": "text"},
+                "verbosity": "medium"
+            },
+            reasoning={
+                "effort": "high",
+                "summary": "auto"
+            },
+            store=True
+        )
+
+        # Extract the text from the response
+        scene_concept = None
+        tokens_used = {"input": 0, "output": 0, "total": 0}
+
+        # Parse response output
+        if hasattr(response, 'output') and response.output is not None:
+            for item in response.output:
+                if hasattr(item, 'content') and item.content:
+                    for content_item in item.content:
+                        if hasattr(content_item, 'type') and content_item.type == "output_text":
+                            if hasattr(content_item, 'text'):
+                                scene_concept = content_item.text.strip()
+                                break
+                if scene_concept:
+                    break
+
+        # Capture token usage
+        if hasattr(response, 'usage'):
+            usage = response.usage
+            if hasattr(usage, 'input_tokens'):
+                tokens_used["input"] = usage.input_tokens
+            if hasattr(usage, 'output_tokens'):
+                tokens_used["output"] = usage.output_tokens
+            if hasattr(usage, 'total_tokens'):
+                tokens_used["total"] = usage.total_tokens
+            log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
+
+        if not scene_concept:
+            raise Exception("No output_text found in Responses API response")
+
+        elapsed = (datetime.now() - start_time).total_seconds()
+        log(f"Generated scene concept ({len(scene_concept)} chars)", timing=elapsed)
+        log("=" * 60)
+        log("SCENE CONCEPT:")
+        log("=" * 60)
+        log(scene_concept)
+        log("=" * 60)
+
+        metadata = {
+            "tokens": tokens_used,
+            "generation_time": elapsed
+        }
+        return scene_concept, metadata
+
+    except Exception as e:
+        elapsed = (datetime.now() - start_time).total_seconds()
+        log(f"Error generating scene concept: {e}", timing=elapsed)
+        return None, {}
+
+
+def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], location_info: Dict[str, str]) -> tuple[Optional[str], Dict[str, Any]]:
+    """Step 2: Integrate HA data into scene concept using GPT-4o-mini
+
+    Args:
+        scene_concept: The scene specification from Step 1
+        context: Home Assistant entity data
+        location_info: Timezone and location information
+
+    Returns:
+        tuple: (final_prompt, metadata_dict) where metadata includes tokens and generation time
+    """
+    start_time = datetime.now()
+
+    # Format search prompts for display
+    search_prompts_formatted = "\n".join(SEARCH_PROMPTS) if SEARCH_PROMPTS else "(none)"
+
+    # Transform context to extract rendered values from templates
+    transformed_context = {}
+    template_counter = 0
+
+    for key, value in (context or {}).items():
+        if isinstance(value, dict) and "rendered_value" in value:
+            template_counter += 1
+            clean_key = f"rendered_template_{template_counter}" if template_counter > 1 else "rendered_template"
+            transformed_context[clean_key] = value["rendered_value"]
+        elif isinstance(value, dict) and "error" in value:
+            template_counter += 1
+            clean_key = f"template_{template_counter}_error"
+            transformed_context[clean_key] = f"[Error: {value['error']}]"
+        else:
+            transformed_context[key] = value
+
+    # Load system prompt
+    system_prompt = load_data_integration_prompt()
+
+    # Build user prompt with scene concept and data
+    user_prompt = f"""{scene_concept}
+
+HA DATA:
+{json.dumps(transformed_context, indent=2)}
+
+USER SEARCH REQUESTS:
+{search_prompts_formatted}"""
+
+    log(f"Integrating data into scene with {DATA_INTEGRATION_MODEL}...")
+    log(f"Context size: {len(json.dumps(transformed_context))} chars")
+    log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
+    if SEARCH_PROMPTS:
+        for i, sp in enumerate(SEARCH_PROMPTS, 1):
+            log(f"  [{i}] {sp}")
+    if location_info.get("location_name"):
+        log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
+
+    try:
+        client = OpenAI(api_key=API_KEY)
+
+        # Use Chat Completions API for GPT-4o-mini
+        response = client.chat.completions.create(
+            model=DATA_INTEGRATION_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_completion_tokens=4096,
+            temperature=0.7
+        )
+
+        final_prompt = response.choices[0].message.content.strip()
+
+        # Capture token usage
+        tokens_used = {"input": 0, "output": 0, "total": 0}
+        if hasattr(response, 'usage'):
+            usage = response.usage
+            if hasattr(usage, 'prompt_tokens'):
+                tokens_used["input"] = usage.prompt_tokens
+            if hasattr(usage, 'completion_tokens'):
+                tokens_used["output"] = usage.completion_tokens
+            if hasattr(usage, 'total_tokens'):
+                tokens_used["total"] = usage.total_tokens
+            log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
+
+        elapsed = (datetime.now() - start_time).total_seconds()
+        log(f"Generated final prompt ({len(final_prompt)} chars)", timing=elapsed)
+        log("=" * 60)
+        log("FINAL PROMPT FOR IMAGE GENERATION:")
+        log("=" * 60)
+        log(final_prompt)
+        log("=" * 60)
+
+        metadata = {
+            "tokens": tokens_used,
+            "generation_time": elapsed
+        }
+        return final_prompt, metadata
+
+    except Exception as e:
+        elapsed = (datetime.now() - start_time).total_seconds()
+        log(f"Error integrating data into scene: {e}", timing=elapsed)
+        return None, {}
+
+
+# ============================================================================
+# LEGACY PIPELINE (2-step) - Kept for backwards compatibility
 # ============================================================================
 
 def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[str, str]) -> tuple[Optional[str], Dict[str, Any]]:
@@ -1152,22 +1395,35 @@ def run_pipeline() -> Dict[str, Any]:
     # Log what will be exposed for this generation
     log_entity_exposure(context)
 
-    # Step 3: Generate art prompt
-    art_prompt, prompt_metadata = generate_prompt_from_context(context, location_info)
-    if not art_prompt:
-        result["error"] = "Failed to generate art prompt"
-        log("PIPELINE FAILED: No art prompt generated")
+    # Step 3: Generate scene concept (Claude 5.2 with reasoning:high)
+    scene_concept, scene_metadata = generate_scene_concept()
+    if not scene_concept:
+        result["error"] = "Failed to generate scene concept"
+        log("PIPELINE FAILED: No scene concept generated")
         return result
 
-    result["steps"]["generate_prompt"] = {
-        "prompt_length": len(art_prompt),
-        "prompt": art_prompt,  # Store full prompt, not preview
-        "tokens": prompt_metadata.get("tokens", {}),
-        "search_count": prompt_metadata.get("search_count", 0),
-        "generation_time": prompt_metadata.get("generation_time", 0)
+    result["steps"]["generate_scene_concept"] = {
+        "concept_length": len(scene_concept),
+        "concept": scene_concept,
+        "tokens": scene_metadata.get("tokens", {}),
+        "generation_time": scene_metadata.get("generation_time", 0)
     }
 
-    # Step 4: Generate image (temporary file)
+    # Step 4: Integrate data into scene (GPT-4o-mini)
+    art_prompt, integration_metadata = integrate_data_into_scene(scene_concept, context, location_info)
+    if not art_prompt:
+        result["error"] = "Failed to integrate data into scene"
+        log("PIPELINE FAILED: Data integration failed")
+        return result
+
+    result["steps"]["integrate_data"] = {
+        "prompt_length": len(art_prompt),
+        "prompt": art_prompt,  # Store full prompt, not preview
+        "tokens": integration_metadata.get("tokens", {}),
+        "generation_time": integration_metadata.get("generation_time", 0)
+    }
+
+    # Step 5: Generate image (temporary file)
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
     temp_filename = f"{FILENAME_PREFIX}_temp.png"
 
@@ -1180,7 +1436,7 @@ def run_pipeline() -> Dict[str, Any]:
     result["steps"]["generate_image"] = image_result
     temp_image_path = image_result["filepath"]
 
-    # Step 5: Archive original with metadata (if save_original enabled)
+    # Step 6: Archive original with metadata (if save_original enabled)
     archive_path = None
     if SAVE_ORIGINAL:
         archive_dir = output_path / "archive"
@@ -1210,7 +1466,7 @@ def run_pipeline() -> Dict[str, Any]:
         import shutil
         shutil.copy2(archive_path, temp_image_path)
 
-    # Step 6: Resize to working image
+    # Step 7: Resize to working image
     working_image_path = str(output_path / f"{FILENAME_PREFIX}.png")
 
     if RESIZE_OUTPUT:
@@ -1243,7 +1499,7 @@ def run_pipeline() -> Dict[str, Any]:
         "timestamp": result["timestamp"]
     })
 
-    # Step 7: Create video (if enabled)
+    # Step 8: Create video (if enabled)
     if ENABLE_VIDEO:
         video_path = str(output_path / f"{FILENAME_PREFIX}.mp4")
 
@@ -1283,15 +1539,17 @@ def run_pipeline() -> Dict[str, Any]:
     log("=" * 60)
 
     # Show summary of key metrics
-    if "generate_prompt" in result["steps"]:
-        prompt_step = result["steps"]["generate_prompt"]
-        tokens = prompt_step.get("tokens", {})
-        search_count = prompt_step.get("search_count", 0)
-
+    if "generate_scene_concept" in result["steps"]:
+        scene_step = result["steps"]["generate_scene_concept"]
+        tokens = scene_step.get("tokens", {})
         if tokens:
-            log(f"📊 Prompt Generation - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
-        if search_count > 0:
-            log(f"🔍 Web Searches: {search_count} performed")
+            log(f"🎨 Scene Concept - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
+
+    if "integrate_data" in result["steps"]:
+        integration_step = result["steps"]["integrate_data"]
+        tokens = integration_step.get("tokens", {})
+        if tokens:
+            log(f"🔗 Data Integration - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
 
     if "generate_image" in result["steps"]:
         img_step = result["steps"]["generate_image"]
@@ -1322,7 +1580,7 @@ def main():
     log(f"Build: {BUILD_TIMESTAMP}")
     log("=" * 60)
     log("Add-on started, waiting for input...")
-    log(f"Config: {PROMPT_MODEL} → {IMAGE_MODEL}")
+    log(f"3-Step Pipeline: {SCENE_CONCEPT_MODEL} → {DATA_INTEGRATION_MODEL} → {IMAGE_MODEL}")
     log(f"Output: {OUTPUT_DIR}/{FILENAME_PREFIX}_*")
     log(f"Resize: {RESIZE_OUTPUT} ({TARGET_RESOLUTION})")
     log(f"Video: {ENABLE_VIDEO} ({VIDEO_DURATION}s @ {VIDEO_FRAMERATE}fps)")
