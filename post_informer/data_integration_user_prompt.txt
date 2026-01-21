@@ -1,0 +1,7 @@
+{scene_concept}
+
+HA DATA:
+{ha_data}
+
+USER SEARCH REQUESTS:
+{search_prompts}

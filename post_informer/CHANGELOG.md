@@ -4,6 +4,29 @@ All notable changes to this add-on will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.7-pre-2] - 2026-01-21
+
+### Added
+- **Editable User Prompts**: All pipeline prompts now fully customizable via Home Assistant UI
+  - `scene_concept_user_prompt` - Step 1 user prompt (file: `scene_concept_user_prompt.txt`)
+  - `data_integration_user_prompt` - Step 2 user prompt template (file: `data_integration_user_prompt.txt`)
+  - Both system and user prompts for each step can now be edited through the UI
+- **Template Support in Data Integration**: User prompt for Step 2 supports template variables
+  - `{scene_concept}` - The scene from Step 1
+  - `{ha_data}` - JSON-formatted Home Assistant entity data
+  - `{search_prompts}` - User search requests
+
+### Changed
+- **Prompt Loading**: All prompts now use file fallbacks when custom values are empty
+  - System prompts: `scene_concept_system_prompt.txt`, `data_integration_system_prompt.txt`
+  - User prompts: `scene_concept_user_prompt.txt`, `data_integration_user_prompt.txt`
+- **Improved Logging**: Shows whether custom or file-based prompts are being used for each step
+
+### Deprecated
+- `system_prompt.txt` - No longer used by 3-step pipeline (legacy 2-step only)
+
+## [1.0.7-pre-1] - 2026-01-20
+
 ### Added
 - **Custom Prompt Template Variables**: Custom prompts can now reference default prompts and configuration
   - `{default_system_prompt}` - Extend built-in system prompt
