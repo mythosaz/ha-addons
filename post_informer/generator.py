@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-4"
+BUILD_VERSION = "1.0.7-pre-5"
 BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # ============================================================================
@@ -54,6 +54,7 @@ except (json.JSONDecodeError, TypeError):
     ENTITY_IDS = _entity_ids_raw
 
 # Prompt Customization
+USE_CUSTOM_PROMPTS = os.environ.get("USE_CUSTOM_PROMPTS", "false").lower() == "true"
 SCENE_CONCEPT_SYSTEM_PROMPT = os.environ.get("SCENE_CONCEPT_SYSTEM_PROMPT", "")
 SCENE_CONCEPT_USER_PROMPT = os.environ.get("SCENE_CONCEPT_USER_PROMPT", "")
 DATA_INTEGRATION_SYSTEM_PROMPT = os.environ.get("DATA_INTEGRATION_SYSTEM_PROMPT", "")
@@ -702,13 +703,20 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
     """
     start_time = datetime.now()
 
-    # Load prompts - use custom if provided, otherwise fall back to files
-    system_prompt = SCENE_CONCEPT_SYSTEM_PROMPT if SCENE_CONCEPT_SYSTEM_PROMPT else load_scene_concept_prompt()
-    user_prompt = SCENE_CONCEPT_USER_PROMPT if SCENE_CONCEPT_USER_PROMPT else load_scene_concept_user_prompt()
+    # Load prompts - use custom if toggle enabled, otherwise fall back to files
+    if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_SYSTEM_PROMPT:
+        system_prompt = SCENE_CONCEPT_SYSTEM_PROMPT
+    else:
+        system_prompt = load_scene_concept_prompt()
+
+    if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_USER_PROMPT:
+        user_prompt = SCENE_CONCEPT_USER_PROMPT
+    else:
+        user_prompt = load_scene_concept_user_prompt()
 
     log(f"Generating scene concept with {SCENE_CONCEPT_MODEL}...")
-    log(f"Using {'custom' if SCENE_CONCEPT_SYSTEM_PROMPT else 'file'} system prompt")
-    log(f"Using {'custom' if SCENE_CONCEPT_USER_PROMPT else 'file'} user prompt")
+    log(f"Using {'custom' if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_SYSTEM_PROMPT else 'default'} system prompt")
+    log(f"Using {'custom' if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_USER_PROMPT else 'default'} user prompt")
 
     try:
         client = OpenAI(api_key=API_KEY)
@@ -830,9 +838,16 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
         else:
             transformed_context[key] = value
 
-    # Load prompts - use custom if provided, otherwise fall back to files
-    system_prompt = DATA_INTEGRATION_SYSTEM_PROMPT if DATA_INTEGRATION_SYSTEM_PROMPT else load_data_integration_prompt()
-    user_prompt_template = DATA_INTEGRATION_USER_PROMPT if DATA_INTEGRATION_USER_PROMPT else load_data_integration_user_prompt()
+    # Load prompts - use custom if toggle enabled, otherwise fall back to files
+    if USE_CUSTOM_PROMPTS and DATA_INTEGRATION_SYSTEM_PROMPT:
+        system_prompt = DATA_INTEGRATION_SYSTEM_PROMPT
+    else:
+        system_prompt = load_data_integration_prompt()
+
+    if USE_CUSTOM_PROMPTS and DATA_INTEGRATION_USER_PROMPT:
+        user_prompt_template = DATA_INTEGRATION_USER_PROMPT
+    else:
+        user_prompt_template = load_data_integration_user_prompt()
 
     # Build user prompt by substituting template variables
     user_prompt = user_prompt_template.format(
@@ -842,8 +857,8 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
     )
 
     log(f"Integrating data into scene with {DATA_INTEGRATION_MODEL}...")
-    log(f"Using {'custom' if DATA_INTEGRATION_SYSTEM_PROMPT else 'file'} system prompt")
-    log(f"Using {'custom' if DATA_INTEGRATION_USER_PROMPT else 'file'} user prompt template")
+    log(f"Using {'custom' if USE_CUSTOM_PROMPTS and DATA_INTEGRATION_SYSTEM_PROMPT else 'default'} system prompt")
+    log(f"Using {'custom' if USE_CUSTOM_PROMPTS and DATA_INTEGRATION_USER_PROMPT else 'default'} user prompt template")
     log(f"Context size: {len(json.dumps(transformed_context))} chars")
     log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
     if SEARCH_PROMPTS:

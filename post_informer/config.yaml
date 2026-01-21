@@ -1,6 +1,6 @@
 name: "Post Informer"
 description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
-version: "1.0.7-pre-4"
+version: "1.0.7-pre-5"
 slug: "post_informer"
 init: false
 arch:
@@ -24,6 +24,7 @@ options:
   entity_ids: ""
 
   # Prompt Customization
+  use_custom_prompts: false
   search_prompts: []
   scene_concept_system_prompt: ""
   scene_concept_user_prompt: ""
@@ -63,6 +64,7 @@ schema:
   entity_ids: str
 
   # Prompt Customization
+  use_custom_prompts: bool
   search_prompts: [str]
   scene_concept_system_prompt: str
   scene_concept_user_prompt: str
