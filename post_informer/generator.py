@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-2"
+BUILD_VERSION = "1.0.7-pre-4"
 BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # ============================================================================
@@ -37,10 +37,9 @@ BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # API Configuration
 API_KEY = os.environ.get("OPENAI_API_KEY", "")
-PROMPT_MODEL = os.environ.get("PROMPT_MODEL", "gpt-5.2")  # Legacy - use SCENE_CONCEPT_MODEL instead
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1.5")
 
-# New 3-step pipeline models
+# 3-Step Pipeline Models
 SCENE_CONCEPT_MODEL = os.environ.get("SCENE_CONCEPT_MODEL", "gpt-5.2")
 DATA_INTEGRATION_MODEL = os.environ.get("DATA_INTEGRATION_MODEL", "gpt-4o-mini")
 
@@ -55,11 +54,6 @@ except (json.JSONDecodeError, TypeError):
     ENTITY_IDS = _entity_ids_raw
 
 # Prompt Customization
-USE_DEFAULT_PROMPTS = os.environ.get("USE_DEFAULT_PROMPTS", "true").lower() == "true"
-CUSTOM_SYSTEM_PROMPT = os.environ.get("CUSTOM_SYSTEM_PROMPT", "")
-CUSTOM_USER_PROMPT = os.environ.get("CUSTOM_USER_PROMPT", "")
-
-# 3-Step Pipeline Prompt Customization
 SCENE_CONCEPT_SYSTEM_PROMPT = os.environ.get("SCENE_CONCEPT_SYSTEM_PROMPT", "")
 SCENE_CONCEPT_USER_PROMPT = os.environ.get("SCENE_CONCEPT_USER_PROMPT", "")
 DATA_INTEGRATION_SYSTEM_PROMPT = os.environ.get("DATA_INTEGRATION_SYSTEM_PROMPT", "")
@@ -101,22 +95,6 @@ SUPERVISOR_API = "http://supervisor/core/api"
 # ============================================================================
 # DEFAULT PROMPTS
 # ============================================================================
-
-def load_system_prompt() -> str:
-    """Load system prompt from file, fallback to empty if not found (LEGACY)"""
-    script_dir = Path(__file__).parent
-    system_prompt_path = script_dir / "system_prompt.txt"
-
-    try:
-        with open(system_prompt_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        log(f"Warning: system_prompt.txt not found at {system_prompt_path}")
-        return ""
-    except Exception as e:
-        log(f"Error loading system_prompt.txt: {e}")
-        return ""
-
 
 def load_scene_concept_prompt() -> str:
     """Load scene concept system prompt for Step 1"""
@@ -180,14 +158,6 @@ def load_data_integration_user_prompt() -> str:
     except Exception as e:
         log(f"Error loading data_integration_user_prompt.txt: {e}")
         return "{scene_concept}\n\nHA DATA:\n{ha_data}\n\nUSER SEARCH REQUESTS:\n{search_prompts}"
-
-DEFAULT_USER_PROMPT_TEMPLATE = """
-USER DATA:
-Home Assistant Data:
-{context}
-
-USER REQUESTED SEARCHES:
-{search_prompts}"""
 
 # Resolution mapping (standard 16:9 aspect ratio)
 RESOLUTION_MAP = {
@@ -930,227 +900,6 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
         return None, {}
 
 
-# ============================================================================
-# LEGACY PIPELINE (2-step) - Kept for backwards compatibility
-# ============================================================================
-
-def generate_prompt_from_context(context: Dict[str, Any], location_info: Dict[str, str]) -> tuple[Optional[str], Dict[str, Any]]:
-    """Call OpenAI to generate an image prompt based on HA context
-
-    Returns:
-        tuple: (prompt_text, metadata_dict) where metadata includes tokens and search_count
-    """
-    start_time = datetime.now()
-
-    # Format search prompts for display
-    search_prompts_formatted = "\n".join(SEARCH_PROMPTS) if SEARCH_PROMPTS else "(none)"
-
-    # Transform context to extract rendered values from templates
-    # This ensures we send clean rendered text to the AI, not the template strings
-    transformed_context = {}
-    template_counter = 0
-
-    for key, value in (context or {}).items():
-        if isinstance(value, dict) and "rendered_value" in value:
-            # This is a rendered template - use clean key and extract rendered value
-            template_counter += 1
-            clean_key = f"rendered_template_{template_counter}" if template_counter > 1 else "rendered_template"
-            transformed_context[clean_key] = value["rendered_value"]
-        elif isinstance(value, dict) and "error" in value:
-            # Template rendering error - include for debugging
-            template_counter += 1
-            clean_key = f"template_{template_counter}_error"
-            transformed_context[clean_key] = f"[Error: {value['error']}]"
-        else:
-            # Plain entity - keep as-is
-            transformed_context[key] = value
-
-    # Load default prompts (always, so they can be referenced in custom prompts)
-    default_system_prompt = load_system_prompt()
-    default_user_prompt = DEFAULT_USER_PROMPT_TEMPLATE.format(
-        context=json.dumps(transformed_context, indent=2),
-        search_prompts=search_prompts_formatted
-    )
-
-    # Build available variables for custom prompt substitution
-    prompt_variables = {
-        # Core data
-        "context": json.dumps(transformed_context, indent=2),
-        "search_prompts": search_prompts_formatted,
-
-        # Default prompts (for extending/modifying)
-        "default_system_prompt": default_system_prompt,
-        "default_user_prompt": default_user_prompt,
-
-        # Location info
-        "location_name": location_info.get("location_name", "Unknown"),
-        "timezone": location_info.get("timezone", "UTC"),
-
-        # Config info
-        "prompt_model": PROMPT_MODEL,
-        "image_model": IMAGE_MODEL,
-    }
-
-    # Choose prompts
-    if USE_DEFAULT_PROMPTS:
-        system_prompt = default_system_prompt
-        user_prompt = default_user_prompt
-    else:
-        system_prompt = CUSTOM_SYSTEM_PROMPT.format(**prompt_variables) if CUSTOM_SYSTEM_PROMPT else default_system_prompt
-        user_prompt = CUSTOM_USER_PROMPT.format(**prompt_variables) if CUSTOM_USER_PROMPT else default_user_prompt
-
-    log(f"Generating art prompt with {PROMPT_MODEL}...")
-    log(f"Context size: {len(json.dumps(transformed_context))} chars")
-    log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
-    if SEARCH_PROMPTS:
-        for i, sp in enumerate(SEARCH_PROMPTS, 1):
-            log(f"  [{i}] {sp}")
-    if location_info.get("location_name"):
-        log(f"Location: {location_info['location_name']} ({location_info['timezone']})")
-
-    try:
-        client = OpenAI(api_key=API_KEY)
-
-        # Try Responses API first for web_search support
-        try:
-            log("Attempting Responses API with web_search...")
-            response = client.responses.create(
-                model=PROMPT_MODEL,
-                input=[
-                    {
-                        "role": "developer",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": system_prompt
-                            }
-                        ]
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": user_prompt
-                            }
-                        ]
-                    }
-                ],
-                text={
-                    "format": {"type": "text"},
-                    "verbosity": "medium"
-                },
-                reasoning={
-                    "effort": "medium",
-                    "summary": "auto"
-                },
-                tools=[
-                    {
-                        "type": "web_search",
-                        "user_location": {
-                            "type": "approximate"
-                        },
-                        "search_context_size": "medium"
-                    }
-                ],
-                store=True
-            )
-
-            # Extract the text from the response
-            # The response is in the output field
-            prompt = None
-            tokens_used = {"input": 0, "output": 0, "total": 0}
-
-            # Parse response output
-            if hasattr(response, 'output') and response.output is not None:
-                for item in response.output:
-                    if hasattr(item, 'content') and item.content:
-                        for content_item in item.content:
-                            if hasattr(content_item, 'type') and content_item.type == "output_text":
-                                if hasattr(content_item, 'text'):
-                                    prompt = content_item.text.strip()
-                                    break
-                    if prompt:
-                        break
-
-            # Capture token usage
-            if hasattr(response, 'usage'):
-                usage = response.usage
-                if hasattr(usage, 'input_tokens'):
-                    tokens_used["input"] = usage.input_tokens
-                if hasattr(usage, 'output_tokens'):
-                    tokens_used["output"] = usage.output_tokens
-                if hasattr(usage, 'total_tokens'):
-                    tokens_used["total"] = usage.total_tokens
-                log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
-
-            # Log web search activity
-            search_count = 0
-            if hasattr(response, 'output') and response.output is not None:
-                for item in response.output:
-                    if hasattr(item, 'content') and item.content:
-                        for content_item in item.content:
-                            if hasattr(content_item, 'type') and content_item.type == "tool_use":
-                                if hasattr(content_item, 'name') and content_item.name == "web_search":
-                                    search_count += 1
-                                    # Extract search query if available
-                                    if hasattr(content_item, 'input') and isinstance(content_item.input, dict):
-                                        query = content_item.input.get('query', 'unknown')
-                                        log(f"🔍 Web Search #{search_count}: {query}")
-                            elif hasattr(content_item, 'type') and content_item.type == "tool_result":
-                                # Log search results summary
-                                if hasattr(content_item, 'content'):
-                                    result_text = str(content_item.content)
-                                    result_preview = result_text[:150] + "..." if len(result_text) > 150 else result_text
-                                    log(f"   ↳ Result: {result_preview}")
-
-            if search_count > 0:
-                log(f"✓ Total web searches performed: {search_count}")
-            else:
-                log("ℹ️  No web searches were triggered by the model")
-
-            if not prompt:
-                raise Exception("No output_text found in Responses API response")
-
-        except Exception as responses_error:
-            log(f"Responses API failed: {responses_error}")
-            log("Falling back to Chat Completions API without web_search...")
-
-            # Fall back to Chat Completions API
-            response = client.chat.completions.create(
-                model=PROMPT_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=4096,
-                temperature=1.0
-            )
-
-            prompt = response.choices[0].message.content.strip()
-            search_count = 0  # No searches in fallback mode
-
-        elapsed = (datetime.now() - start_time).total_seconds()
-        log(f"Generated prompt ({len(prompt)} chars)", timing=elapsed)
-        log("=" * 60)
-        log("FULL PROMPT FOR IMAGE GENERATION:")
-        log("=" * 60)
-        log(prompt)
-        log("=" * 60)
-
-        metadata = {
-            "tokens": tokens_used,
-            "search_count": search_count,
-            "generation_time": elapsed
-        }
-        return prompt, metadata
-
-    except Exception as e:
-        elapsed = (datetime.now() - start_time).total_seconds()
-        log(f"Error generating prompt: {e}", timing=elapsed)
-        return None, {}
-
-
 def generate_image(prompt: str, filename: str) -> Optional[Dict[str, Any]]:
     """Generate image via OpenAI API and save to output directory"""
     start_time = datetime.now()
@@ -1337,9 +1086,12 @@ def embed_metadata(image_path: str, prompt: str, metadata: Optional[Dict[str, An
             if "model" in metadata:
                 cmd.extend(["-set", "Software", f"OpenAI {metadata['model']}"])
 
-            # Add prompt model if available
-            if "prompt_model" in metadata:
-                cmd.extend(["-set", "comment:prompt_model", metadata['prompt_model']])
+            # Add pipeline model info
+            if "scene_concept_model" in metadata:
+                cmd.extend(["-set", "comment:scene_concept_model", metadata['scene_concept_model']])
+
+            if "data_integration_model" in metadata:
+                cmd.extend(["-set", "comment:data_integration_model", metadata['data_integration_model']])
 
             # Add image model if available
             if "image_model" in metadata:
@@ -1493,7 +1245,8 @@ def run_pipeline() -> Dict[str, Any]:
         # Embed metadata into archived file
         metadata = {
             "model": IMAGE_MODEL,
-            "prompt_model": PROMPT_MODEL,
+            "scene_concept_model": SCENE_CONCEPT_MODEL,
+            "data_integration_model": DATA_INTEGRATION_MODEL,
             "image_model": IMAGE_MODEL,
             "timestamp": timestamp,
             "image_size": IMAGE_SIZE,

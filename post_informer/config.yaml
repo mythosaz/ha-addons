@@ -1,6 +1,6 @@
 name: "Post Informer"
 description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
-version: "1.0.7-pre-3"
+version: "1.0.7-pre-4"
 slug: "post_informer"
 init: false
 arch:
@@ -14,7 +14,6 @@ map:
 options:
   # API Configuration
   openai_api_key: ""
-  prompt_model: "gpt-5.2"  # Legacy - use scene_concept_model instead
   image_model: "gpt-image-1.5"
 
   # 3-Step Pipeline Models
@@ -25,12 +24,7 @@ options:
   entity_ids: ""
 
   # Prompt Customization
-  use_default_prompts: true
-  custom_system_prompt: ""
-  custom_user_prompt: ""
   search_prompts: []
-
-  # 3-Step Pipeline Prompt Customization
   scene_concept_system_prompt: ""
   scene_concept_user_prompt: ""
   data_integration_system_prompt: ""
@@ -59,7 +53,6 @@ options:
 schema:
   # API Configuration
   openai_api_key: str
-  prompt_model: str
   image_model: str
 
   # 3-Step Pipeline Models
@@ -70,12 +63,7 @@ schema:
   entity_ids: str
 
   # Prompt Customization
-  use_default_prompts: bool
-  custom_system_prompt: str
-  custom_user_prompt: str
   search_prompts: [str]
-
-  # 3-Step Pipeline Prompt Customization
   scene_concept_system_prompt: str
   scene_concept_user_prompt: str
   data_integration_system_prompt: str
