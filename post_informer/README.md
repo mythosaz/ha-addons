@@ -18,6 +18,10 @@ AI-powered HUD display generator for Home Assistant - turns your banal HA data i
 
 _(~60-90s total)_
 
+## Why not just use OpenAI Conversations?
+
+OpenAI Conversations isn't quick to support new models, and image-1.5 requests can take longer than 1-minute (max HAOS shell command time), as can large or compliated user search requests.
+
 ---
 
 ## Quick Start
