@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-5"
+BUILD_VERSION = "1.0.7-pre-7"
 BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # ============================================================================
@@ -807,7 +807,7 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
 
 
 def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], location_info: Dict[str, str]) -> tuple[Optional[str], Dict[str, Any]]:
-    """Step 2: Integrate HA data into scene concept using GPT-4o-mini
+    """Step 2: Integrate HA data into scene concept using gpt-5.2 with web search tools
 
     Args:
         scene_concept: The scene specification from Step 1
@@ -870,7 +870,7 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
     try:
         client = OpenAI(api_key=API_KEY)
 
-        # Use Chat Completions API for GPT-4o-mini
+        # Use Chat Completions API with web search enabled
         response = client.chat.completions.create(
             model=DATA_INTEGRATION_MODEL,
             messages=[
@@ -878,7 +878,8 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
                 {"role": "user", "content": user_prompt}
             ],
             max_completion_tokens=4096,
-            temperature=0.7
+            temperature=0.7,
+            tools=[{"type": "web_search_bing"}]
         )
 
         final_prompt = response.choices[0].message.content.strip()
@@ -950,6 +951,18 @@ def generate_image(prompt: str, filename: str) -> Optional[Dict[str, Any]]:
         image_data = base64.b64decode(response.data[0].b64_json)
         filepath.write_bytes(image_data)
 
+        # Capture token usage if available
+        tokens_used = {"input": 0, "output": 0, "total": 0}
+        if hasattr(response, 'usage'):
+            usage = response.usage
+            if hasattr(usage, 'prompt_tokens'):
+                tokens_used["input"] = usage.prompt_tokens
+            if hasattr(usage, 'completion_tokens'):
+                tokens_used["output"] = usage.completion_tokens
+            if hasattr(usage, 'total_tokens'):
+                tokens_used["total"] = usage.total_tokens
+            log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
+
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Image rendered: {filepath}", timing=elapsed)
 
@@ -958,7 +971,8 @@ def generate_image(prompt: str, filename: str) -> Optional[Dict[str, Any]]:
             "filepath": str(filepath),
             "filename": filename,
             "size": IMAGE_SIZE,
-            "render_time": elapsed
+            "render_time": elapsed,
+            "tokens": tokens_used
         }
 
     except Exception as e:
@@ -1210,25 +1224,29 @@ def run_pipeline() -> Dict[str, Any]:
         log("PIPELINE FAILED: No scene concept generated")
         return result
 
+    scene_complete_time = (datetime.now() - pipeline_start).total_seconds()
     result["steps"]["generate_scene_concept"] = {
         "concept_length": len(scene_concept),
         "concept": scene_concept,
         "tokens": scene_metadata.get("tokens", {}),
-        "generation_time": scene_metadata.get("generation_time", 0)
+        "generation_time": scene_metadata.get("generation_time", 0),
+        "pipeline_subtime": scene_complete_time
     }
 
-    # Step 4: Integrate data into scene (GPT-4o-mini)
+    # Step 4: Integrate data into scene (gpt-5.2 with web search)
     art_prompt, integration_metadata = integrate_data_into_scene(scene_concept, context, location_info)
     if not art_prompt:
         result["error"] = "Failed to integrate data into scene"
         log("PIPELINE FAILED: Data integration failed")
         return result
 
+    integration_complete_time = (datetime.now() - pipeline_start).total_seconds()
     result["steps"]["integrate_data"] = {
         "prompt_length": len(art_prompt),
         "prompt": art_prompt,  # Store full prompt, not preview
         "tokens": integration_metadata.get("tokens", {}),
-        "generation_time": integration_metadata.get("generation_time", 0)
+        "generation_time": integration_metadata.get("generation_time", 0),
+        "pipeline_subtime": integration_complete_time
     }
 
     # Step 5: Generate image (temporary file)
@@ -1241,6 +1259,8 @@ def run_pipeline() -> Dict[str, Any]:
         log("PIPELINE FAILED: Image generation failed")
         return result
 
+    image_complete_time = (datetime.now() - pipeline_start).total_seconds()
+    image_result["pipeline_subtime"] = image_complete_time
     result["steps"]["generate_image"] = image_result
     temp_image_path = image_result["filepath"]
 
@@ -1347,30 +1367,41 @@ def run_pipeline() -> Dict[str, Any]:
     log(f"PIPELINE COMPLETE", timing=pipeline_elapsed)
     log("=" * 60)
 
-    # Show summary of key metrics
+    # Show summary of key metrics with model names and subtimes
     if "generate_scene_concept" in result["steps"]:
         scene_step = result["steps"]["generate_scene_concept"]
         tokens = scene_step.get("tokens", {})
-        if tokens:
-            log(f"🎨 Scene Concept - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
+        subtime = scene_step.get("pipeline_subtime", 0)
+        if tokens and tokens.get('total', 0) > 0:
+            log(f"{SCENE_CONCEPT_MODEL} - Scene Concept @ {subtime:.2f}s - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
+        else:
+            log(f"{SCENE_CONCEPT_MODEL} - Scene Concept @ {subtime:.2f}s")
 
     if "integrate_data" in result["steps"]:
         integration_step = result["steps"]["integrate_data"]
         tokens = integration_step.get("tokens", {})
-        if tokens:
-            log(f"🔗 Data Integration - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
+        subtime = integration_step.get("pipeline_subtime", 0)
+        if tokens and tokens.get('total', 0) > 0:
+            log(f"{DATA_INTEGRATION_MODEL} - Data Integration @ {subtime:.2f}s - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total")
+        else:
+            log(f"{DATA_INTEGRATION_MODEL} - Data Integration @ {subtime:.2f}s")
 
     if "generate_image" in result["steps"]:
         img_step = result["steps"]["generate_image"]
-        log(f"🖼️  Image: {img_step.get('size', 'unknown')} @ {img_step.get('render_time', 0):.2f}s")
+        tokens = img_step.get("tokens", {})
+        subtime = img_step.get("pipeline_subtime", 0)
+        if tokens and tokens.get('total', 0) > 0:
+            log(f"{IMAGE_MODEL} - Image Generation @ {subtime:.2f}s - Tokens: {tokens.get('input', 0)} in / {tokens.get('output', 0)} out / {tokens.get('total', 0)} total - Size: {img_step.get('size', 'unknown')}")
+        else:
+            log(f"{IMAGE_MODEL} - Image Generation @ {subtime:.2f}s - Size: {img_step.get('size', 'unknown')}")
 
     if "resize_image" in result["steps"]:
         resize_step = result["steps"]["resize_image"]
-        log(f"📐 Resize: {resize_step.get('resolution', 'unknown')} @ {resize_step.get('resize_time', 0):.2f}s")
+        log(f"Resize @ {resize_step.get('resize_time', 0):.2f}s - Resolution: {resize_step.get('resolution', 'unknown')}")
 
     if "create_video" in result["steps"]:
         video_step = result["steps"]["create_video"]
-        log(f"🎬 Video: {video_step.get('duration', 0)}s @ {video_step.get('encode_time', 0):.2f}s")
+        log(f"Video @ {video_step.get('encode_time', 0):.2f}s - Duration: {video_step.get('duration', 0)}s")
 
     log("=" * 60)
 
