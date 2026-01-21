@@ -4,7 +4,6 @@ bashio::log.info "Starting Post Informer add-on"
 
 # API Configuration
 export OPENAI_API_KEY="$(bashio::config 'openai_api_key')"
-export PROMPT_MODEL="$(bashio::config 'prompt_model')"
 export IMAGE_MODEL="$(bashio::config 'image_model')"
 
 # 3-Step Pipeline Models
@@ -15,10 +14,7 @@ export DATA_INTEGRATION_MODEL="$(bashio::config 'data_integration_model')"
 export ENTITY_IDS="$(bashio::config 'entity_ids')"
 
 # Prompt Customization
-export USE_DEFAULT_PROMPTS="$(bashio::config 'use_default_prompts')"
-export CUSTOM_SYSTEM_PROMPT="$(bashio::config 'custom_system_prompt')"
-export CUSTOM_USER_PROMPT="$(bashio::config 'custom_user_prompt')"
-# 3-Step Pipeline Prompt Customization
+export USE_CUSTOM_PROMPTS="$(bashio::config 'use_custom_prompts')"
 export SCENE_CONCEPT_SYSTEM_PROMPT="$(bashio::config 'scene_concept_system_prompt')"
 export SCENE_CONCEPT_USER_PROMPT="$(bashio::config 'scene_concept_user_prompt')"
 export DATA_INTEGRATION_SYSTEM_PROMPT="$(bashio::config 'data_integration_system_prompt')"
