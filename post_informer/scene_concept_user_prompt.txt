@@ -1,0 +1,3 @@
+Generate one scene.
+Commit to it.
+No alternatives.

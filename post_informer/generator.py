@@ -28,8 +28,8 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-1"
-BUILD_TIMESTAMP = "2026-01-20 00:00:00 UTC"
+BUILD_VERSION = "1.0.7-pre-2"
+BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -63,6 +63,7 @@ CUSTOM_USER_PROMPT = os.environ.get("CUSTOM_USER_PROMPT", "")
 SCENE_CONCEPT_SYSTEM_PROMPT = os.environ.get("SCENE_CONCEPT_SYSTEM_PROMPT", "")
 SCENE_CONCEPT_USER_PROMPT = os.environ.get("SCENE_CONCEPT_USER_PROMPT", "")
 DATA_INTEGRATION_SYSTEM_PROMPT = os.environ.get("DATA_INTEGRATION_SYSTEM_PROMPT", "")
+DATA_INTEGRATION_USER_PROMPT = os.environ.get("DATA_INTEGRATION_USER_PROMPT", "")
 
 # Search Prompts (JSON array of search strings)
 _search_prompts_raw = os.environ.get("SEARCH_PROMPTS", "[]")
@@ -147,6 +148,38 @@ def load_data_integration_prompt() -> str:
     except Exception as e:
         log(f"Error loading data_integration_system_prompt.txt: {e}")
         return ""
+
+
+def load_scene_concept_user_prompt() -> str:
+    """Load scene concept user prompt for Step 1"""
+    script_dir = Path(__file__).parent
+    prompt_path = script_dir / "scene_concept_user_prompt.txt"
+
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        log(f"Warning: scene_concept_user_prompt.txt not found at {prompt_path}")
+        return "Generate one scene.\nCommit to it.\nNo alternatives."
+    except Exception as e:
+        log(f"Error loading scene_concept_user_prompt.txt: {e}")
+        return "Generate one scene.\nCommit to it.\nNo alternatives."
+
+
+def load_data_integration_user_prompt() -> str:
+    """Load data integration user prompt template for Step 2"""
+    script_dir = Path(__file__).parent
+    prompt_path = script_dir / "data_integration_user_prompt.txt"
+
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        log(f"Warning: data_integration_user_prompt.txt not found at {prompt_path}")
+        return "{scene_concept}\n\nHA DATA:\n{ha_data}\n\nUSER SEARCH REQUESTS:\n{search_prompts}"
+    except Exception as e:
+        log(f"Error loading data_integration_user_prompt.txt: {e}")
+        return "{scene_concept}\n\nHA DATA:\n{ha_data}\n\nUSER SEARCH REQUESTS:\n{search_prompts}"
 
 DEFAULT_USER_PROMPT_TEMPLATE = """
 USER DATA:
@@ -701,11 +734,11 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
 
     # Load prompts - use custom if provided, otherwise fall back to files
     system_prompt = SCENE_CONCEPT_SYSTEM_PROMPT if SCENE_CONCEPT_SYSTEM_PROMPT else load_scene_concept_prompt()
-    user_prompt = SCENE_CONCEPT_USER_PROMPT if SCENE_CONCEPT_USER_PROMPT else "Generate one scene.\nCommit to it.\nNo alternatives."
+    user_prompt = SCENE_CONCEPT_USER_PROMPT if SCENE_CONCEPT_USER_PROMPT else load_scene_concept_user_prompt()
 
     log(f"Generating scene concept with {SCENE_CONCEPT_MODEL}...")
-    log(f"Using {'custom' if SCENE_CONCEPT_SYSTEM_PROMPT else 'default'} system prompt")
-    log(f"Using {'custom' if SCENE_CONCEPT_USER_PROMPT else 'default'} user prompt")
+    log(f"Using {'custom' if SCENE_CONCEPT_SYSTEM_PROMPT else 'file'} system prompt")
+    log(f"Using {'custom' if SCENE_CONCEPT_USER_PROMPT else 'file'} user prompt")
 
     try:
         client = OpenAI(api_key=API_KEY)
@@ -827,20 +860,20 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
         else:
             transformed_context[key] = value
 
-    # Load system prompt - use custom if provided, otherwise fall back to file
+    # Load prompts - use custom if provided, otherwise fall back to files
     system_prompt = DATA_INTEGRATION_SYSTEM_PROMPT if DATA_INTEGRATION_SYSTEM_PROMPT else load_data_integration_prompt()
+    user_prompt_template = DATA_INTEGRATION_USER_PROMPT if DATA_INTEGRATION_USER_PROMPT else load_data_integration_user_prompt()
 
-    # Build user prompt with scene concept and data
-    user_prompt = f"""{scene_concept}
-
-HA DATA:
-{json.dumps(transformed_context, indent=2)}
-
-USER SEARCH REQUESTS:
-{search_prompts_formatted}"""
+    # Build user prompt by substituting template variables
+    user_prompt = user_prompt_template.format(
+        scene_concept=scene_concept,
+        ha_data=json.dumps(transformed_context, indent=2),
+        search_prompts=search_prompts_formatted
+    )
 
     log(f"Integrating data into scene with {DATA_INTEGRATION_MODEL}...")
-    log(f"Using {'custom' if DATA_INTEGRATION_SYSTEM_PROMPT else 'default'} system prompt")
+    log(f"Using {'custom' if DATA_INTEGRATION_SYSTEM_PROMPT else 'file'} system prompt")
+    log(f"Using {'custom' if DATA_INTEGRATION_USER_PROMPT else 'file'} user prompt template")
     log(f"Context size: {len(json.dumps(transformed_context))} chars")
     log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
     if SEARCH_PROMPTS:

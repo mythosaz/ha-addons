@@ -22,6 +22,7 @@ export CUSTOM_USER_PROMPT="$(bashio::config 'custom_user_prompt')"
 export SCENE_CONCEPT_SYSTEM_PROMPT="$(bashio::config 'scene_concept_system_prompt')"
 export SCENE_CONCEPT_USER_PROMPT="$(bashio::config 'scene_concept_user_prompt')"
 export DATA_INTEGRATION_SYSTEM_PROMPT="$(bashio::config 'data_integration_system_prompt')"
+export DATA_INTEGRATION_USER_PROMPT="$(bashio::config 'data_integration_user_prompt')"
 # Handle search_prompts - build JSON array from YAML list
 if bashio::config.has_value 'search_prompts'; then
     # bashio returns list items one per line, convert to JSON array

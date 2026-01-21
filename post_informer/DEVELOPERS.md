@@ -6,7 +6,7 @@ Technical details and advanced customization for Post Informer.
 
 ## Architecture
 
-### Pipeline Flow
+### Pipeline Flow (3-Step AI Pipeline)
 
 ```
 User Trigger
@@ -17,9 +17,11 @@ Process Jinja2 Templates
     ↓
 Discover Location (zone.home)
     ↓
-Generate Prompt (gpt-5.2 + web search)
+Step 1: Generate Scene Concept (gpt-5.2, Responses API, reasoning:high)
     ↓
-Render Image (gpt-image-1.5)
+Step 2: Integrate Data into Scene (gpt-4o-mini, Chat Completions API)
+    ↓
+Step 3: Render Image (gpt-image-1.5)
     ↓
 Archive Original (with metadata)
     ↓
@@ -35,14 +37,17 @@ Fire HA Events
 **generator.py** - Main pipeline orchestration
 - Entity gathering via Supervisor API
 - Jinja2 template processing
-- OpenAI API integration (Responses + Chat Completions)
+- OpenAI API integration (Responses + Chat Completions + Image)
+- 3-step AI pipeline (Scene → Data Integration → Image)
 - Image/video processing
 - Event firing
 
-**system_prompt.txt** - Creative direction for image generation
-- Loaded at runtime from `/system_prompt.txt`
-- Instructs gpt-5.2 on composition style
-- References gpt-image-1.5 capabilities
+**Prompt Files** - Creative direction for 3-step pipeline (editable via HA UI)
+- `scene_concept_system_prompt.txt` - Step 1 system prompt (developer role)
+- `scene_concept_user_prompt.txt` - Step 1 user prompt
+- `data_integration_system_prompt.txt` - Step 2 system prompt
+- `data_integration_user_prompt.txt` - Step 2 user prompt template (with {scene_concept}, {ha_data}, {search_prompts})
+- `system_prompt.txt` - DEPRECATED (legacy 2-step pipeline)
 
 **run.sh** - Entrypoint and environment setup
 - Reads bashio config
@@ -135,24 +140,69 @@ Supports both call and attribute syntax:
 
 ---
 
+## 3-Step AI Pipeline
+
+### Overview
+
+Post Informer uses a sophisticated 3-step process to generate contextual images:
+
+**Step 1: Scene Concept Generation** (gpt-5.2, Responses API)
+- Generates creative visual scene using high-effort reasoning
+- No HA data - focuses purely on creative concept generation
+- Outputs structured scene specification with medium, physics, and compositional constraints
+- Uses `scene_concept_system_prompt.txt` and `scene_concept_user_prompt.txt`
+
+**Step 2: Data Integration** (gpt-4o-mini, Chat Completions API)
+- Takes scene from Step 1 and integrates HA data diegetically
+- Adds HUD overlay only when data can't fit naturally
+- Preserves scene integrity - doesn't change medium, physics, or action
+- Uses `data_integration_system_prompt.txt` and `data_integration_user_prompt.txt` (template)
+- Outputs final image-1.5 ready prompt
+
+**Step 3: Image Rendering** (gpt-image-1.5, Image Generation API)
+- Renders the final prompt from Step 2
+- No additional prompting needed
+
+### Prompt Customization
+
+All prompts can be customized via Home Assistant UI:
+- `scene_concept_system_prompt` - Override Step 1 developer role prompt
+- `scene_concept_user_prompt` - Override Step 1 user prompt
+- `data_integration_system_prompt` - Override Step 2 system prompt
+- `data_integration_user_prompt` - Override Step 2 user template (supports {scene_concept}, {ha_data}, {search_prompts})
+
+When left empty, defaults are loaded from corresponding `.txt` files.
+
+---
+
 ## API Integration
 
-### Responses API (Primary)
+### Responses API (Step 1 - Scene Concept)
 
-Used for web search capabilities:
+Used for high-effort reasoning without tools:
 
 ```python
 client.responses.create(
     model="gpt-5.2",
     input=[
-        {"role": "developer", "content": [...]},
-        {"role": "user", "content": [...]}
+        {
+            "role": "developer",
+            "content": [{"type": "input_text", "text": scene_concept_system_prompt}]
+        },
+        {
+            "role": "user",
+            "content": [{"type": "input_text", "text": scene_concept_user_prompt}]
+        }
     ],
-    tools=[{
-        "type": "web_search",
-        "user_location": {"type": "approximate"},
-        "search_context_size": "medium"
-    }]
+    text={
+        "format": {"type": "text"},
+        "verbosity": "medium"
+    },
+    reasoning={
+        "effort": "high",
+        "summary": "auto"
+    },
+    store=True
 )
 ```
 
@@ -172,19 +222,28 @@ response.usage.output_tokens
 response.usage.total_tokens
 ```
 
-### Chat Completions API (Fallback)
+### Chat Completions API (Step 2 - Data Integration)
 
-Used when Responses API fails:
+Used for data integration with gpt-4o-mini:
 
 ```python
 client.chat.completions.create(
-    model="gpt-5.2",
+    model="gpt-4o-mini",
     messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
+        {"role": "system", "content": data_integration_system_prompt},
+        {"role": "user", "content": formatted_user_prompt}
     ],
     max_completion_tokens=4096,
-    temperature=1.0
+    temperature=0.7
+)
+```
+
+User prompt is built from template:
+```python
+user_prompt = user_prompt_template.format(
+    scene_concept=scene_concept,
+    ha_data=json.dumps(transformed_context, indent=2),
+    search_prompts=search_prompts_formatted
 )
 ```
 
