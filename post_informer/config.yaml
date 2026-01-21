@@ -18,7 +18,7 @@ options:
 
   # 3-Step Pipeline Models
   scene_concept_model: "gpt-5.2"
-  data_integration_model: "gpt-4o-mini"
+  data_integration_model: "gpt-5.2"
 
   # Entity Monitoring
   entity_ids: ""
