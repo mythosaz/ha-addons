@@ -59,6 +59,11 @@ USE_DEFAULT_PROMPTS = os.environ.get("USE_DEFAULT_PROMPTS", "true").lower() == "
 CUSTOM_SYSTEM_PROMPT = os.environ.get("CUSTOM_SYSTEM_PROMPT", "")
 CUSTOM_USER_PROMPT = os.environ.get("CUSTOM_USER_PROMPT", "")
 
+# 3-Step Pipeline Prompt Customization
+SCENE_CONCEPT_SYSTEM_PROMPT = os.environ.get("SCENE_CONCEPT_SYSTEM_PROMPT", "")
+SCENE_CONCEPT_USER_PROMPT = os.environ.get("SCENE_CONCEPT_USER_PROMPT", "")
+DATA_INTEGRATION_SYSTEM_PROMPT = os.environ.get("DATA_INTEGRATION_SYSTEM_PROMPT", "")
+
 # Search Prompts (JSON array of search strings)
 _search_prompts_raw = os.environ.get("SEARCH_PROMPTS", "[]")
 try:
@@ -694,11 +699,13 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
     """
     start_time = datetime.now()
 
-    # Load system prompt
-    system_prompt = load_scene_concept_prompt()
-    user_prompt = "Generate one scene.\nCommit to it.\nNo alternatives."
+    # Load prompts - use custom if provided, otherwise fall back to files
+    system_prompt = SCENE_CONCEPT_SYSTEM_PROMPT if SCENE_CONCEPT_SYSTEM_PROMPT else load_scene_concept_prompt()
+    user_prompt = SCENE_CONCEPT_USER_PROMPT if SCENE_CONCEPT_USER_PROMPT else "Generate one scene.\nCommit to it.\nNo alternatives."
 
     log(f"Generating scene concept with {SCENE_CONCEPT_MODEL}...")
+    log(f"Using {'custom' if SCENE_CONCEPT_SYSTEM_PROMPT else 'default'} system prompt")
+    log(f"Using {'custom' if SCENE_CONCEPT_USER_PROMPT else 'default'} user prompt")
 
     try:
         client = OpenAI(api_key=API_KEY)
@@ -820,8 +827,8 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
         else:
             transformed_context[key] = value
 
-    # Load system prompt
-    system_prompt = load_data_integration_prompt()
+    # Load system prompt - use custom if provided, otherwise fall back to file
+    system_prompt = DATA_INTEGRATION_SYSTEM_PROMPT if DATA_INTEGRATION_SYSTEM_PROMPT else load_data_integration_prompt()
 
     # Build user prompt with scene concept and data
     user_prompt = f"""{scene_concept}
@@ -833,6 +840,7 @@ USER SEARCH REQUESTS:
 {search_prompts_formatted}"""
 
     log(f"Integrating data into scene with {DATA_INTEGRATION_MODEL}...")
+    log(f"Using {'custom' if DATA_INTEGRATION_SYSTEM_PROMPT else 'default'} system prompt")
     log(f"Context size: {len(json.dumps(transformed_context))} chars")
     log(f"Search prompts in request: {len(SEARCH_PROMPTS)}")
     if SEARCH_PROMPTS:
