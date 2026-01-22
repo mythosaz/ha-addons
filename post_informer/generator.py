@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-7"
+BUILD_VERSION = "1.0.7-pre-8"
 BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # ============================================================================
@@ -879,7 +879,7 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
             ],
             max_completion_tokens=4096,
             temperature=0.7,
-            tools=[{"type": "web_search_bing"}]
+            tools=[{"type": "web_search"}]
         )
 
         final_prompt = response.choices[0].message.content.strip()
