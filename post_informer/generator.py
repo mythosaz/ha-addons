@@ -807,7 +807,7 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
 
 
 def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], location_info: Dict[str, str]) -> tuple[Optional[str], Dict[str, Any]]:
-    """Step 2: Integrate HA data into scene concept using gpt-5.2 with web search tools
+    """Step 2: Integrate HA data into scene concept using Responses API with web search
 
     Args:
         scene_concept: The scene specification from Step 1
@@ -870,31 +870,75 @@ def integrate_data_into_scene(scene_concept: str, context: Dict[str, Any], locat
     try:
         client = OpenAI(api_key=API_KEY)
 
-        # Use Chat Completions API with web search enabled
-        response = client.chat.completions.create(
+        # Use Responses API with web search enabled
+        log("Calling Responses API with web_search tool...")
+        response = client.responses.create(
             model=DATA_INTEGRATION_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+            input=[
+                {
+                    "role": "developer",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": system_prompt
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": user_prompt
+                        }
+                    ]
+                }
             ],
-            max_completion_tokens=4096,
-            temperature=0.7,
-            tools=[{"type": "web_search"}]
+            text={
+                "format": {"type": "text"},
+                "verbosity": "medium"
+            },
+            tools=[
+                {
+                    "type": "web_search",
+                    "user_location": {
+                        "type": "approximate"
+                    },
+                    "search_context_size": "medium"
+                }
+            ],
+            store=True
         )
 
-        final_prompt = response.choices[0].message.content.strip()
+        # Extract the text from the response
+        final_prompt = None
+        tokens_used = {"input": 0, "output": 0, "total": 0}
+
+        # Parse response output
+        if hasattr(response, 'output') and response.output is not None:
+            for item in response.output:
+                if hasattr(item, 'content') and item.content:
+                    for content_item in item.content:
+                        if hasattr(content_item, 'type') and content_item.type == "output_text":
+                            if hasattr(content_item, 'text'):
+                                final_prompt = content_item.text.strip()
+                                break
+                if final_prompt:
+                    break
 
         # Capture token usage
-        tokens_used = {"input": 0, "output": 0, "total": 0}
         if hasattr(response, 'usage'):
             usage = response.usage
-            if hasattr(usage, 'prompt_tokens'):
-                tokens_used["input"] = usage.prompt_tokens
-            if hasattr(usage, 'completion_tokens'):
-                tokens_used["output"] = usage.completion_tokens
+            if hasattr(usage, 'input_tokens'):
+                tokens_used["input"] = usage.input_tokens
+            if hasattr(usage, 'output_tokens'):
+                tokens_used["output"] = usage.output_tokens
             if hasattr(usage, 'total_tokens'):
                 tokens_used["total"] = usage.total_tokens
             log(f"Tokens - Input: {tokens_used['input']}, Output: {tokens_used['output']}, Total: {tokens_used['total']}")
+
+        if not final_prompt:
+            raise Exception("No output_text found in Responses API response")
 
         elapsed = (datetime.now() - start_time).total_seconds()
         log(f"Generated final prompt ({len(final_prompt)} chars)", timing=elapsed)
