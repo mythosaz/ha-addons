@@ -657,6 +657,214 @@ Consider archival location carefully if privacy is a concern.
    - Generate multiple variations
    - A/B testing for best result
 
+6. **OpenAI Agents SDK Integration**
+   - Explore using OpenAI's Agents SDK for pipeline orchestration
+   - Benefits: Built-in tracing, structured agent handoffs, native tool integration
+   - Reference implementation created in OpenAI Agent Builder (see below)
+
+   <details>
+   <summary>OpenAI Agent Flow Reference Implementation (TypeScript)</summary>
+
+   ```typescript
+   import { webSearchTool, imageGenerationTool, Agent, AgentInputItem, Runner, withTrace } from "@openai/agents";
+
+   // Tool definitions
+   const webSearchPreview = webSearchTool({
+     userLocation: {
+       type: "approximate",
+       country: undefined,
+       region: undefined,
+       city: undefined,
+       timezone: undefined
+     },
+     searchContextSize: "medium"
+   })
+   const imageGeneration = imageGenerationTool({
+     model: "gpt-image-1.5",
+     size: "1536x1024",
+     quality: "auto",
+     outputFormat: "png",
+     background: "auto",
+     moderation: "low",
+     partialImages: 0
+   })
+   const buildAScene = new Agent({
+     name: "Build a Scene ",
+     instructions: `You are a creativity system. Your job is to originate one unexpected visual scene by deliberately avoiding common LLM failure modes and avoiding your own recent attractors.
+
+   CORE INTENT
+   - Examples (from user or you) are evidence of range, not templates.
+   - Produce a scene that is orthogonal to defaults: not just different subject matter, but different mode of depiction.
+
+   SELECTION PROTOCOL (do this silently before writing)
+   1) Choose one VISUAL MEDIUM from a broad space (physical craft, photograph, film still, stained glass, watercolor, oil, charcoal sketch-in-progress, stop-motion/claymation, comic panel, children's book page, museum diorama, technical cutaway, medical diagram, tattoo/skin, chalkboard, billboard, packaging art, instruction manual, sports broadcast frame, security camera still, stage play, AR HUD overlay, etc.).
+   2) Choose one SUBJECT DOMAIN that is not the easiest container (avoid generic narrative spaces like courtrooms, spaceship bridges, cyberpunk alleys, or fantasy markets).
+   3) Choose one COMPOSITIONAL RULE that is enforced like physics.
+
+   ANTI-RECENCY BANLIST (do this silently)
+   Do not reuse motifs you have leaned on recently (e.g., maps, blueprints, instruction leaflets, exploded diagrams, looms, embroidery, transit diagrams) unless the scene would remain strong and surprising without that motif. If it would collapse without it, it is disallowed.
+
+   DIEGETIC GROUNDING (CRITICAL)
+   The scene must exist as an in-world object, capture, artifact, or display.
+   - The image is of something that physically or socially exists within the scene's reality (a photograph, mural, poster, broadcast frame, museum piece, tattoo, sign, diagram on a wall, product label, chalkboard, HUD, etc.).
+   - Avoid omniscient or god's-eye illustration with no implied creator, surface, or context.
+   - Any information, symbolism, or data must appear as part of the world, not as an external overlay.
+
+   WHAT TO CONSTRUCT
+   Invent one specific moment, captured at the instant something changes.
+
+   The scene must:
+   - Depict active change (failure, interruption, escalation, collision, or reveal)
+   - Be governed by a clear visual logic where the chosen medium shapes motion and tension
+   - Read as a complete, striking image at a glance
+   - Feel intentional, not random
+
+   PREFER
+   - Reality reinterpreted by medium (artifact, staged object, illustration-within-illustration, projection)
+   - Scale mismatch, role reversal, or representation breaking its subject
+   - A simple situation turning consequential
+
+   AVOID
+   - Generic environments chosen as easy narrative containers
+   - Static concept art with nothing happening
+   - Surface remixing of any prior examples
+
+   OUTPUT FORMAT (exactly this, nothing else)
+   SCENE_TITLE: A short, evocative name
+   SCENE_DESCRIPTION: 2–4 sentences describing what is happening in this exact moment
+   VISUAL_MEDIUM & PHYSICS: How the scene is rendered and what rules that medium imposes
+   KEY ACTION / INSTABILITY: What is actively changing or failing right now
+   COMPOSITIONAL CONSTRAINT: One hard visual rule the image must obey
+
+   FINAL CHECK (silent)
+   - Exactly one scene.
+   - Scene title appears only once.
+   - If multiple candidates were generated, output only the strongest one.`,
+     model: "gpt-5.2",
+     modelSettings: {
+       reasoning: {
+         effort: "medium",
+         summary: "auto"
+       },
+       store: false
+     }
+   });
+
+   const dataIntegrationAgent = new Agent({
+     name: "Data Integration Agent",
+     instructions: `## Role
+   You smartly integrate user data into the provided scene using diegetic elements and a heads-up display (HUD).
+
+   ## Goals
+   - Review the provided scene.
+   - Treat the original scene's premise, medium, and visual physics as immutable.
+   - Evaluate the HOME ASSISTANT data.
+   - Perform searches for any USER SEARCH REQUESTS.
+   - Weave IMPORTANT user data seamlessly as diegetic scene elements.
+   - Present other RELEVANT user data through a contemporary HUD, using clear judgment.
+   - Ensure HOME ASSISTANT data and USER SEARCH results enhance—but do not dominate—the scene.
+   - Avoid clichés, tropes, and the inclusion of irrelevant or nonsensical data.
+
+   ## Output Requirements
+   - Output the original scene, augmented with key diegetic elements and a HUD displaying other RELEVANT data.
+   - Do not provide any reasoning or explanation.
+   - Deliver only a single image at 1536x1024.`,
+     model: "gpt-5.2",
+     tools: [
+       webSearchPreview,
+       imageGeneration
+     ],
+     modelSettings: {
+       reasoning: {
+         effort: "medium",
+         summary: "auto"
+       },
+       store: false
+     }
+   });
+
+   type WorkflowInput = { input_as_text: string };
+
+   // Main code entrypoint
+   export const runWorkflow = async (workflow: WorkflowInput) => {
+     return await withTrace("Full Post Informer Pipeline", async () => {
+       const state = {
+         ha_data: "SUN: night sun 0° rising   | next-phase: sunrise @ 2026-01-24 14:29     WEATHER: Partlycloudy | 60°F /   80% humidity | Wind: 1mph 178°        BTC:   $89,506 (+$111, +0.1%)     WORD OF THE   DAY: chiasmus | This calendar is provided by WebCal.Guru https://www.webcal.guru/.       CALENDAR: Special Day | today | 💬 National Compliment Day CALENDAR: 2026 Holidays |   2026-01-25 16:00:00 | Dinner - Nykki and Cookie CALENDAR: Important Dates |   2026-01-28 20:00:00 | Trash Goes Out    LOCKS: Front locked     UPCOMING   SHOWS: None   scheduled",
+         user_searches: "  - national/world news of major importance (none acceptable).   - Phoenix news of major importance (none acceptable).   - Interesting upcoming events in Phoenix (none acceptable)."
+       };
+       const conversationHistory: AgentInputItem[] = [
+         { role: "user", content: [{ type: "input_text", text: workflow.input_as_text }] }
+       ];
+       const runner = new Runner({
+         traceMetadata: {
+           __trace_source__: "agent-builder",
+           workflow_id: "wf_697476c5de34819081b74be4586c2daf03660763aba06b78"
+         }
+       });
+       const buildASceneResultTemp = await runner.run(
+         buildAScene,
+         [
+           ...conversationHistory,
+           {
+             role: "user",
+             content: [
+               { type: "input_text", text: "Generate one scene." }
+             ]
+           }
+         ]
+       );
+       conversationHistory.push(...buildASceneResultTemp.newItems.map((item) => item.rawItem));
+
+       if (!buildASceneResultTemp.finalOutput) {
+           throw new Error("Agent result is undefined");
+       }
+
+       const buildASceneResult = {
+         output_text: buildASceneResultTemp.finalOutput ?? ""
+       };
+
+       const dataIntegrationResultTemp = await runner.run(
+         dataIntegrationAgent,
+         [
+           ...conversationHistory,
+           {
+             role: "user",
+             content: [
+               { type: "input_text", text: `SCENE:
+                ${buildASceneResult.output_text}
+
+               HA DATA:
+                ${state.ha_data}
+
+               USER SEARCH REQUESTS:
+                ${state.user_searches}` }
+             ]
+           }
+         ]
+       );
+       conversationHistory.push(...dataIntegrationResultTemp.newItems.map((item) => item.rawItem));
+
+       if (!dataIntegrationResultTemp.finalOutput) {
+           throw new Error("Agent result is undefined");
+       }
+
+       const dataIntegrationResult = {
+         output_text: dataIntegrationResultTemp.finalOutput ?? ""
+       };
+
+       return dataIntegrationResult;
+     });
+   }
+   ```
+
+   **Notes:**
+   - Original workflow_id: `wf_697476c5de34819081b74be4586c2daf03660763aba06b78`
+   - This uses the `@openai/agents` SDK (TypeScript)
+   - Would need to be adapted to Python or run as a separate Node.js service
+   - The original code had syntax issues with variable names starting with numbers; fixed here
+
+   </details>
+
 ---
 
 ## License
