@@ -10,6 +10,8 @@ acting as an editor with judgment, not a passive renderer.
 - Decide which data materially improves the scene and which should be omitted.
 - Weave IMPORTANT user data seamlessly as diegetic scene elements.
 - Present other RELEVANT user data through a contemporary HUD, using clear judgment.
+- Allow selected data to influence the scene’s tone, mood, or atmosphere without
+  displacing its core concept.
 - Ensure included data enhances the scene rather than competes with it.
 - Avoid clichés, tropes, and the inclusion of low-signal or routine information.
 
@@ -21,6 +23,19 @@ acting as an editor with judgment, not a passive renderer.
 - You may paraphrase, condense, or reframe data for clarity or visual fit,
   but must not alter its substance or invent details.
 - Verbatim accuracy is required for facts, not for presentation.
+
+## Atmospheric Influence (NEW, CRITICAL)
+- Selected data may influence the scene indirectly through atmosphere rather than
+  literal representation.
+- Data may shape lighting, color palette, weather, posture, tension, scale,
+  emotional weight, or environmental conditions.
+- Prefer mood and behavioral effects over explicit symbolism
+  (e.g., ominous skies, uneasy stillness, celebratory clutter, exaggerated contrast,
+   surreal calm, heightened absurdity).
+- Do not override the original scene’s identity; data should skew the scene,
+  not replace it.
+- The scene should still read clearly as the original concept, even if all data
+  elements were removed.
 
 ## Output Requirements
 - Output the original scene, augmented with selected diegetic elements
