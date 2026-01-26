@@ -20,14 +20,14 @@ A candidate scene is INVALID if it could be described as a normal photograph/fil
 Also invalid: still life, establishing shots, cozy daily-life vignettes, generic 'a person doing X without a representational twist,' or 'remember the random thing?' gag-scene with no governing medium rule.
 
 MEDIUM FREEDOM (CRITICAL)
-The scene's depiction can use ANY medium or production style. Treat medium as a design space, not a list.
+The scene's depiction can use ANY medium or production style. Treat -medium- as a design space, not a list.
 Your job is to invent or combine media as long as the medium imposes rules that shape the scene.
 
 MEDIUM SELECTION (silent)
 Pick a medium by choosing:
 A) Medium family (abstract): physical miniature, practical fabrication, drawn line-art, graphic print, pixel/low-res, stop-motion frame craft, text-as-image, found-material collage, inked skin/engraving, broadcast/recorded artifact, etc.
 B) Constraint parameters: texture, resolution, continuity, articulation limits, frame rate, assembly seams, printing registration, stitch/needle behavior, adhesive failure, paper grain, stamp/cancellation rules, ink bleed, etc.
-C) One explicit physics rule that this medium enforces and that actively causes the instability.
+C) One explicit "physics rule" that this medium enforces and that actively causes the instability.
 
 RANGE MARKERS (do not copy; do not output verbatim; silent)
 Some named styles/tropes might exist in surrounding context (e.g., specific animation shows, specific craft formats, specific meme-comic aesthetics). These are only to communicate breadth.
@@ -35,7 +35,7 @@ Hard rule: if any candidate relies on a named marker as its primary hook, discar
 
 TWIST QUOTA (HARD)
 Each valid scene must include at least TWO of:
-1) Ontology twist: agents/objects are not what they should be (category error, role swap, identity mismatch).
+1) Ontology twist: agents/objects are not what they "should" be (category error, role swap, identity mismatch).
 2) Medium/material twist: the world is expressed through a nonstandard physical/graphic medium with constraints.
 3) Rule twist: one explicit physics/grammar rule that actively drives the moment of change.
 
@@ -60,7 +60,8 @@ You will perform internal rejection sampling and then output only ONE scene.
 SCENE CONSTRUCTION
 Invent one specific moment captured at the instant something changes.
 The scene must:
-- Depict active change (interruption, failure, escalation, reveal, collision).
+- Include at least one element undergoing irreversible physical change at the moment depicted.
+- This change must be mechanically visible, not merely implied or metaphorical.
 - Be governed by the chosen medium's physical or cultural rules.
 - Read clearly at a glance.
 
@@ -72,10 +73,11 @@ PREFER
 - Forming novel subjects/scenarios for each request.
 
 AVOID
+- Using the provided examples.
 - Fully saturated or 'finished' canvases.
 - Generic narrative containers.
 - Surface remixing of prior outputs.
-- Diagrammatic defaults (maps/boards/grids/dashboards/manuals/instruction sheets) unless they are truly unavoidable AND still satisfy Twist Quota and prompt-distance scoring.
+- Diagrammatic defaults (maps/dashboards) unless satisfy Twist Quota and prompt-distance scoring.
 - Repeating the same subject or category.
 
 OUTPUT FORMAT (exactly this, nothing else)
@@ -89,4 +91,5 @@ FINAL CHECK (silent)
 - Exactly one scene.
 - Scene title appears once.
 - If multiple candidates were generated, output only the strongest.
-- The chosen scene passes Anti-Banality Gate + Twist Quota. Do not output scenes that use repeat subjects or example choices.
+- The chosen scene passes Anti-Banality Gate + Twist Quota. 
+- DO NOT output scenes that use repeat subjects or example choices.
