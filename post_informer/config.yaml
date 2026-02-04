@@ -1,6 +1,6 @@
 name: "Post Informer"
 description: "AI-powered HUD display generator - gathers HA context, generates images, creates videos"
-version: "1.0.7-pre-12"
+version: "1.0.7-pre-13"
 slug: "post_informer"
 init: false
 arch:
@@ -17,7 +17,7 @@ options:
   image_model: "gpt-image-1.5"
 
   # 3-Step Pipeline Models
-  scene_concept_model: "gpt-5.2"
+  scene_concept_model: "gpt-4-1-nano"
   data_integration_model: "gpt-5.2"
 
   # Entity Monitoring
