@@ -40,7 +40,7 @@ API_KEY = os.environ.get("OPENAI_API_KEY", "")
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1.5")
 
 # 3-Step Pipeline Models
-SCENE_CONCEPT_MODEL = os.environ.get("SCENE_CONCEPT_MODEL", "gpt-5.2")
+SCENE_CONCEPT_MODEL = os.environ.get("SCENE_CONCEPT_MODEL", "gpt-4-1-nano")
 DATA_INTEGRATION_MODEL = os.environ.get("DATA_INTEGRATION_MODEL", "gpt-4o-mini")
 
 # Entity Monitoring
@@ -179,6 +179,40 @@ def log(msg: str, timing: Optional[float] = None):
         print(f"[post_informer] [{timestamp}] {msg} ({timing:.2f}s)", flush=True)
     else:
         print(f"[post_informer] [{timestamp}] {msg}", flush=True)
+
+
+# ============================================================================
+# RANDOM WORD API
+# ============================================================================
+
+def fetch_random_words(count: int = 10) -> List[str]:
+    """Fetch random words from the random-word-api
+
+    Args:
+        count: Number of random words to fetch (default: 10)
+
+    Returns:
+        List of random words, or empty list on failure
+    """
+    start_time = datetime.now()
+    url = f"https://random-word-api.herokuapp.com/word?number={count}"
+
+    log(f"Fetching {count} random words from API...")
+
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        words = resp.json()
+
+        elapsed = (datetime.now() - start_time).total_seconds()
+        log(f"Fetched {len(words)} random words: {words}", timing=elapsed)
+
+        return words
+
+    except Exception as e:
+        elapsed = (datetime.now() - start_time).total_seconds()
+        log(f"Error fetching random words: {e}", timing=elapsed)
+        return []
 
 
 def to_ha_media_path(filesystem_path: str) -> str:
@@ -695,8 +729,11 @@ def run_startup_entity_scan():
 # PIPELINE STEPS - 3-STEP AI PIPELINE
 # ============================================================================
 
-def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
-    """Step 1: Generate creative scene concept using Claude 5.2 with reasoning:high
+def generate_scene_concept(random_words: List[str]) -> tuple[Optional[str], Dict[str, Any]]:
+    """Step 1: Generate creative scene concept using gpt-4-1-nano
+
+    Args:
+        random_words: List of random words to include in the user prompt
 
     Returns:
         tuple: (scene_concept_text, metadata_dict) where metadata includes tokens and generation time
@@ -710,19 +747,23 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
         system_prompt = load_scene_concept_prompt()
 
     if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_USER_PROMPT:
-        user_prompt = SCENE_CONCEPT_USER_PROMPT
+        user_prompt_template = SCENE_CONCEPT_USER_PROMPT
     else:
-        user_prompt = load_scene_concept_user_prompt()
+        user_prompt_template = load_scene_concept_user_prompt()
+
+    # Format user prompt with random words
+    user_prompt = user_prompt_template.format(random_words=json.dumps(random_words))
 
     log(f"Generating scene concept with {SCENE_CONCEPT_MODEL}...")
     log(f"Using {'custom' if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_SYSTEM_PROMPT else 'default'} system prompt")
     log(f"Using {'custom' if USE_CUSTOM_PROMPTS and SCENE_CONCEPT_USER_PROMPT else 'default'} user prompt")
+    log(f"Random words: {random_words}")
 
     try:
         client = OpenAI(api_key=API_KEY)
 
-        # Use Responses API with reasoning:high
-        log("Calling Responses API with reasoning:high...")
+        # Use Responses API (nano model - no reasoning parameter)
+        log("Calling Responses API...")
         response = client.responses.create(
             model=SCENE_CONCEPT_MODEL,
             input=[
@@ -745,14 +786,6 @@ def generate_scene_concept() -> tuple[Optional[str], Dict[str, Any]]:
                     ]
                 }
             ],
-            text={
-                "format": {"type": "text"},
-                "verbosity": "medium"
-            },
-            reasoning={
-                "effort": "high",
-                "summary": "auto"
-            },
             store=True
         )
 
@@ -1223,6 +1256,13 @@ def run_pipeline() -> Dict[str, Any]:
     output_path = Path(OUTPUT_DIR)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    # Step 0: Fetch random words (before any other processing)
+    random_words = fetch_random_words(10)
+    result["steps"]["fetch_random_words"] = {
+        "count": len(random_words),
+        "words": random_words
+    }
+
     # Step 1: Get all HA states and discover location
     # Note: Raw ENTITY_IDS config is shown in ENTITY EXPOSURE section below
 
@@ -1261,8 +1301,8 @@ def run_pipeline() -> Dict[str, Any]:
     # Log what will be exposed for this generation
     log_entity_exposure(context)
 
-    # Step 3: Generate scene concept (Claude 5.2 with reasoning:high)
-    scene_concept, scene_metadata = generate_scene_concept()
+    # Step 3: Generate scene concept (gpt-4-1-nano with random words)
+    scene_concept, scene_metadata = generate_scene_concept(random_words)
     if not scene_concept:
         result["error"] = "Failed to generate scene concept"
         log("PIPELINE FAILED: No scene concept generated")
