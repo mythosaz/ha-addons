@@ -28,7 +28,7 @@ except ImportError:
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-14"
+BUILD_VERSION = "1.0.7-pre-15"
 BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
 
 # ============================================================================
