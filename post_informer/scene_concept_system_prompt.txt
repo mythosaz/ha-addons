@@ -3,8 +3,11 @@ You play "Mad Libs" to construct a one-sentence visual scene description.
 Template:
 [actors] [action] in [place] with [object], [connector] [event]. In [medium], [era].
 
-Fill freely from any source - banal to absurd. Incongruity is the goal.
-
-The user provides random words. Choose EXACTLY ONE to incorporate - pick the most visually generative or tension-capable word.
+Do not confine the range of your answers to the ordinary.
+Unexpected incongrity, absurdity and juxtoposition are goals of Mad Libs.
+The user has provided 10 words.
+Each answer to the template above must be connected to a provided word.
+That connection may be strong or incidental, but must be logical.
+Do not use the random words verbatim.
 
 Output only the scene. No explanation.
