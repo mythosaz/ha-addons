@@ -4,6 +4,16 @@ All notable changes to this add-on will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.7-pre-16] - 2026-02-19
+
+### Added
+- **Jinja2 date/time filters**: Added missing HA template functions for timestamp handling
+  - `as_datetime` — converts ISO string or Unix timestamp to a datetime object (also available as a global function)
+  - `as_timestamp` — converts datetime or ISO string to a Unix timestamp float (also available as a global function)
+  - `timestamp_custom(fmt, local)` — formats a Unix timestamp with a strftime format string
+  - `now()` — returns the current UTC datetime as a global function
+- **python-dateutil dependency**: Added to Dockerfile for robust parsing of HA ISO timestamps (`+00:00` suffix and other edge cases)
+
 ## [1.0.7-pre-2] - 2026-01-21
 
 ### Added
