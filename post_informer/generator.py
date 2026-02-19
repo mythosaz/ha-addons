@@ -13,7 +13,7 @@ import requests
 import subprocess
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from openai import OpenAI
 from typing import Dict, List, Optional, Any, Union
 
@@ -24,12 +24,19 @@ try:
 except ImportError:
     JINJA2_AVAILABLE = False
 
+# dateutil for robust ISO timestamp parsing (HA uses +00:00 suffixes)
+try:
+    from dateutil import parser as dateutil_parser
+    DATEUTIL_AVAILABLE = True
+except ImportError:
+    DATEUTIL_AVAILABLE = False
+
 # Ensure UTF-8 output for proper character encoding
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Version info
-BUILD_VERSION = "1.0.7-pre-15"
-BUILD_TIMESTAMP = "2026-01-21 00:00:00 UTC"
+BUILD_VERSION = "1.0.7-pre-16"
+BUILD_TIMESTAMP = "2026-02-19 00:00:00 UTC"
 
 # ============================================================================
 # CONFIGURATION FROM ENVIRONMENT
@@ -611,6 +618,44 @@ def process_entity_config(entity_config: Union[str, List[str]], all_states: List
 
         env.filters['int'] = int_filter
         env.filters['float'] = float_filter
+
+        # Date/time filters — mirrors HA's built-in template functions
+        def _parse_iso(value):
+            """Parse an ISO timestamp string to datetime, with dateutil fallback."""
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, (int, float)):
+                return datetime.fromtimestamp(float(value), tz=timezone.utc)
+            if DATEUTIL_AVAILABLE:
+                return dateutil_parser.isoparse(str(value))
+            return datetime.fromisoformat(str(value))
+
+        def as_datetime_filter(value):
+            """Convert ISO string / Unix timestamp to datetime (HA: as_datetime)."""
+            return _parse_iso(value)
+
+        def as_timestamp_filter(value):
+            """Convert datetime / ISO string to Unix timestamp float (HA: as_timestamp)."""
+            if isinstance(value, (int, float)):
+                return float(value)
+            return _parse_iso(value).timestamp()
+
+        def timestamp_custom_filter(value, fmt='%Y-%m-%d %H:%M:%S', local=True):
+            """Format a Unix timestamp with strftime (HA: timestamp_custom)."""
+            if isinstance(value, (int, float)):
+                dt = datetime.fromtimestamp(float(value), tz=timezone.utc)
+            else:
+                dt = _parse_iso(value)
+            return dt.strftime(fmt)
+
+        env.filters['as_datetime'] = as_datetime_filter
+        env.filters['as_timestamp'] = as_timestamp_filter
+        env.filters['timestamp_custom'] = timestamp_custom_filter
+
+        # Also expose as global functions (HA supports both filter and function call)
+        jinja_context['as_datetime'] = as_datetime_filter
+        jinja_context['as_timestamp'] = as_timestamp_filter
+        jinja_context['now'] = lambda: datetime.now(tz=timezone.utc)
 
         for template_str in templates:
             try:
